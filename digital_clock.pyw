@@ -3,6 +3,7 @@ from datetime import datetime
 import urllib.request
 import json
 import threading
+import os
 
 class DigitalClock:
     def __init__(self):
@@ -77,9 +78,42 @@ class DigitalClock:
         )
         self.kosdaq_label.pack()
 
+        # 메모 구분선
+        self.memo_separator = tk.Frame(self.frame, bg='#00d9ff', height=1)
+        self.memo_separator.pack(fill='x', pady=(10, 5))
+
+        # 메모 라벨
+        self.memo_label = tk.Label(
+            self.frame,
+            text='MEMO',
+            font=('맑은 고딕', 9),
+            fg='#00d9ff',
+            bg='#1a1a2e'
+        )
+        self.memo_label.pack()
+
+        # 메모 입력 필드
+        self.memo_text = tk.Text(
+            self.frame,
+            font=('맑은 고딕', 10),
+            fg='#ffffff',
+            bg='#252540',
+            insertbackground='#00d9ff',
+            height=3,
+            width=30,
+            relief='flat',
+            wrap='word'
+        )
+        self.memo_text.pack(pady=(5, 0))
+        self.memo_text.bind('<KeyRelease>', self.save_memo)
+
+        # 메모 불러오기
+        self.load_memo()
+
         # 드래그 이벤트 바인딩
         for widget in [self.frame, self.time_label, self.date_label,
-                       self.day_label, self.kospi_label, self.kosdaq_label, self.separator]:
+                       self.day_label, self.kospi_label, self.kosdaq_label,
+                       self.separator, self.memo_separator, self.memo_label]:
             widget.bind('<Button-1>', self.start_move)
             widget.bind('<B1-Motion>', self.on_move)
 
@@ -115,6 +149,30 @@ class DigitalClock:
         new_x = self.root.winfo_x() + deltax
         new_y = self.root.winfo_y() + deltay
         self.root.geometry(f'+{new_x}+{new_y}')
+
+    def get_memo_path(self):
+        """메모 파일 경로 반환"""
+        return os.path.join(os.path.dirname(os.path.abspath(__file__)), 'memo.txt')
+
+    def save_memo(self, event=None):
+        """메모 내용을 파일에 저장"""
+        try:
+            content = self.memo_text.get('1.0', 'end-1c')
+            with open(self.get_memo_path(), 'w', encoding='utf-8') as f:
+                f.write(content)
+        except:
+            pass
+
+    def load_memo(self):
+        """파일에서 메모 내용 불러오기"""
+        try:
+            memo_path = self.get_memo_path()
+            if os.path.exists(memo_path):
+                with open(memo_path, 'r', encoding='utf-8') as f:
+                    content = f.read()
+                    self.memo_text.insert('1.0', content)
+        except:
+            pass
 
     def fetch_weather(self):
         """날씨 정보를 가져오는 함수"""
