@@ -14,6 +14,9 @@ class DigitalClock:
         self.weather_text = ""
         # 주식 지수 저장
         self.stock_info = None
+        # 개별 종목 정보 저장
+        self.individual_stocks = {}
+        self.stock_codes = ['395270', '144600', '473640', '161510', '000660', '005930', '229200']
 
         # 창 설정
         self.root.overrideredirect(True)  # 제목표시줄 제거
@@ -110,10 +113,40 @@ class DigitalClock:
         # 메모 불러오기
         self.load_memo()
 
+        # 개별 종목 구분선
+        self.stock_separator = tk.Frame(self.frame, bg='#00d9ff', height=1)
+        self.stock_separator.pack(fill='x', pady=(10, 5))
+
+        # 개별 종목 라벨
+        self.stock_title_label = tk.Label(
+            self.frame,
+            text='MY STOCKS',
+            font=('맑은 고딕', 9),
+            fg='#00d9ff',
+            bg='#1a1a2e'
+        )
+        self.stock_title_label.pack()
+
+        # 개별 종목 라벨들 생성
+        self.stock_labels = {}
+        for code in self.stock_codes:
+            label = tk.Label(
+                self.frame,
+                font=('맑은 고딕', 10),
+                fg='#ffffff',
+                bg='#1a1a2e',
+                text=f'{code} 로딩중...'
+            )
+            label.pack()
+            self.stock_labels[code] = label
+
         # 드래그 이벤트 바인딩
-        for widget in [self.frame, self.time_label, self.date_label,
+        drag_widgets = [self.frame, self.time_label, self.date_label,
                        self.day_label, self.kospi_label, self.kosdaq_label,
-                       self.separator, self.memo_separator, self.memo_label]:
+                       self.separator, self.memo_separator, self.memo_label,
+                       self.stock_separator, self.stock_title_label]
+        drag_widgets.extend(self.stock_labels.values())
+        for widget in drag_widgets:
             widget.bind('<Button-1>', self.start_move)
             widget.bind('<B1-Motion>', self.on_move)
 
@@ -125,6 +158,9 @@ class DigitalClock:
 
         # 주식 지수 업데이트 시작
         self.update_stock()
+
+        # 개별 종목 업데이트 시작
+        self.update_individual_stocks()
 
         # 시계 업데이트 시작
         self.update_clock()
@@ -341,6 +377,62 @@ class DigitalClock:
         thread.start()
         # 1분마다 주식 업데이트
         self.root.after(60000, self.update_stock)
+
+    def fetch_individual_stocks(self):
+        """개별 종목 정보를 가져오는 함수"""
+        try:
+            headers = {'User-Agent': 'Mozilla/5.0'}
+            for code in self.stock_codes:
+                try:
+                    url = f"https://m.stock.naver.com/api/stock/{code}/basic"
+                    req = urllib.request.Request(url, headers=headers)
+                    with urllib.request.urlopen(req, timeout=10) as response:
+                        data = json.loads(response.read().decode('utf-8'))
+
+                    name = data.get('stockName', code)
+                    price = data.get('closePrice', '0')
+                    change = data.get('compareToPreviousClosePrice', '0')
+                    rate = data.get('fluctuationsRatio', '0')
+
+                    arrow = "▲" if float(change) > 0 else "▼" if float(change) < 0 else ""
+                    color = "up" if float(change) > 0 else "down" if float(change) < 0 else "flat"
+
+                    self.individual_stocks[code] = {
+                        'name': name,
+                        'price': price,
+                        'change': abs(float(change)),
+                        'rate': rate,
+                        'arrow': arrow,
+                        'color': color
+                    }
+                except:
+                    pass
+
+            # 화면 업데이트
+            self.root.after(0, self.update_individual_stocks_display)
+        except:
+            pass
+
+    def update_individual_stocks_display(self):
+        """개별 종목 화면 업데이트"""
+        for code, label in self.stock_labels.items():
+            if code in self.individual_stocks:
+                stock = self.individual_stocks[code]
+                text = f"{stock['name']}  {stock['price']}  {stock['arrow']}{stock['change']:.0f} ({stock['rate']}%)"
+                label.config(text=text)
+                if stock['color'] == 'up':
+                    label.config(fg='#ff6b6b')  # 빨간색 (상승)
+                elif stock['color'] == 'down':
+                    label.config(fg='#4dabf7')  # 파란색 (하락)
+                else:
+                    label.config(fg='#ffffff')  # 흰색 (보합)
+
+    def update_individual_stocks(self):
+        """백그라운드에서 개별 종목 업데이트"""
+        thread = threading.Thread(target=self.fetch_individual_stocks, daemon=True)
+        thread.start()
+        # 1분마다 업데이트
+        self.root.after(60000, self.update_individual_stocks)
 
     def update_clock(self):
         days = ['월요일', '화요일', '수요일', '목요일', '금요일', '토요일', '일요일']
