@@ -17,7 +17,7 @@ class DigitalClock:
         # 창 설정
         self.root.overrideredirect(True)  # 제목표시줄 제거
         self.root.attributes('-topmost', True)  # 항상 위에
-        self.root.attributes('-alpha', 0.9)  # 약간 투명
+        self.root.attributes('-alpha', 0.7)  # 반투명
         self.root.configure(bg='#1a1a2e')
 
         # 드래그 이동을 위한 변수
