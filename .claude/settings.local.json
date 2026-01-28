@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(start \"\" pythonw \"C:\\\\Users\\\\이동옥\\\\clock\\\\digital_clock.pyw\")",
+      "Bash(python:*)"
+    ]
+  }
+}

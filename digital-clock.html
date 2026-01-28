@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>디지털 시계</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        .clock-container {
+            text-align: center;
+            padding: 40px 60px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 20px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .time {
+            font-size: 120px;
+            font-weight: 300;
+            color: #00d9ff;
+            text-shadow: 0 0 20px rgba(0, 217, 255, 0.5);
+            letter-spacing: 5px;
+            font-family: 'Consolas', 'Courier New', monospace;
+        }
+
+        .seconds {
+            font-size: 60px;
+            color: #00d9ff;
+            opacity: 0.7;
+            vertical-align: super;
+        }
+
+        .date {
+            font-size: 28px;
+            color: #ffffff;
+            margin-top: 20px;
+            opacity: 0.8;
+            letter-spacing: 3px;
+        }
+
+        .day {
+            font-size: 20px;
+            color: #00d9ff;
+            margin-top: 10px;
+            opacity: 0.6;
+            text-transform: uppercase;
+            letter-spacing: 5px;
+        }
+
+        .colon {
+            animation: blink 1s infinite;
+        }
+
+        @keyframes blink {
+            0%, 50% { opacity: 1; }
+            51%, 100% { opacity: 0.3; }
+        }
+    </style>
+</head>
+<body>
+    <div class="clock-container">
+        <div class="time" id="time">00:00<span class="seconds">00</span></div>
+        <div class="date" id="date">2024년 1월 1일</div>
+        <div class="day" id="day">월요일</div>
+    </div>
+
+    <script>
+        const days = ['일요일', '월요일', '화요일', '수요일', '목요일', '금요일', '토요일'];
+
+        function updateClock() {
+            const now = new Date();
+
+            const hours = String(now.getHours()).padStart(2, '0');
+            const minutes = String(now.getMinutes()).padStart(2, '0');
+            const seconds = String(now.getSeconds()).padStart(2, '0');
+
+            const year = now.getFullYear();
+            const month = now.getMonth() + 1;
+            const date = now.getDate();
+            const day = days[now.getDay()];
+
+            document.getElementById('time').innerHTML =
+                `${hours}<span class="colon">:</span>${minutes}<span class="seconds">${seconds}</span>`;
+            document.getElementById('date').textContent = `${year}년 ${month}월 ${date}일`;
+            document.getElementById('day').textContent = day;
+        }
+
+        updateClock();
+        setInterval(updateClock, 1000);
+    </script>
+</body>
+</html>
