@@ -96,9 +96,9 @@ class DigitalClock:
         self.memo_text = tk.Text(
             self.frame,
             font=('맑은 고딕', 10),
-            fg='#ffffff',
-            bg='#252540',
-            insertbackground='#00d9ff',
+            fg='#000000',
+            bg='#ffffff',
+            insertbackground='#000000',
             height=3,
             width=30,
             relief='flat',
@@ -129,14 +129,10 @@ class DigitalClock:
         # 시계 업데이트 시작
         self.update_clock()
 
-        # 화면 우측 하단에 배치
+        # 화면 좌측 상단에 배치
         self.root.update_idletasks()
-        screen_width = self.root.winfo_screenwidth()
-        screen_height = self.root.winfo_screenheight()
-        window_width = self.root.winfo_width()
-        window_height = self.root.winfo_height()
-        x = screen_width - window_width - 50
-        y = screen_height - window_height - 100
+        x = 50
+        y = 50
         self.root.geometry(f'+{x}+{y}')
 
     def start_move(self, event):
