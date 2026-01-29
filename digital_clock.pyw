@@ -12,11 +12,14 @@ class DigitalClock:
 
         # 날씨 정보 저장
         self.weather_text = ""
+        # 24시간 온도 데이터 저장
+        self.hourly_temps = []
         # 주식 지수 저장
         self.stock_info = None
         # 개별 종목 정보 저장
         self.individual_stocks = {}
-        self.stock_codes = ['395270', '144600', '473640', '161510', '000660', '005930', '229200']
+        self.default_stock_codes = ['395270', '144600', '473640', '161510', '000660', '005930', '229200']
+        self.stock_codes = self.load_stock_codes()
 
         # 투명도 설정
         self.alpha = self.load_alpha()
@@ -61,6 +64,16 @@ class DigitalClock:
             bg='#1a1a2e'
         )
         self.day_label.pack()
+
+        # 24시간 온도 그래프 캔버스
+        self.temp_canvas = tk.Canvas(
+            self.frame,
+            width=280,
+            height=60,
+            bg='#1a1a2e',
+            highlightthickness=0
+        )
+        self.temp_canvas.pack(pady=(5, 0))
 
         # 구분선
         self.separator = tk.Frame(self.frame, bg='#00d9ff', height=1)
@@ -148,6 +161,20 @@ class DigitalClock:
         self.refresh_btn.bind('<Enter>', lambda e: self.refresh_btn.config(fg='#00d9ff'))
         self.refresh_btn.bind('<Leave>', lambda e: self.refresh_btn.config(fg='#888888'))
 
+        # 설정 버튼
+        self.settings_btn = tk.Label(
+            self.stock_header_frame,
+            text=' [설정]',
+            font=('맑은 고딕', 8),
+            fg='#888888',
+            bg='#1a1a2e',
+            cursor='hand2'
+        )
+        self.settings_btn.pack(side='left')
+        self.settings_btn.bind('<Button-1>', self.open_stock_settings)
+        self.settings_btn.bind('<Enter>', lambda e: self.settings_btn.config(fg='#00d9ff'))
+        self.settings_btn.bind('<Leave>', lambda e: self.settings_btn.config(fg='#888888'))
+
         # 개별 종목 라벨들 생성 (종목명 + 가격정보 분리)
         self.stock_labels = {}
         self.stock_frames = {}
@@ -184,7 +211,7 @@ class DigitalClock:
 
         # 드래그 이벤트 바인딩
         drag_widgets = [self.frame, self.time_label, self.date_label,
-                       self.day_label, self.kospi_label, self.kosdaq_label,
+                       self.day_label, self.temp_canvas, self.kospi_label, self.kosdaq_label,
                        self.separator, self.memo_separator, self.memo_label,
                        self.stock_separator, self.stock_header_frame, self.stock_title_label]
         # 주식 프레임과 라벨들 추가
@@ -207,6 +234,9 @@ class DigitalClock:
 
         # 날씨 업데이트 시작
         self.update_weather()
+
+        # 24시간 온도 예보 업데이트 시작
+        self.update_hourly_temps()
 
         # 주식 지수 업데이트 시작
         self.update_stock()
@@ -274,6 +304,175 @@ class DigitalClock:
         if hasattr(self, '_alpha_timer'):
             self.root.after_cancel(self._alpha_timer)
         self._alpha_timer = self.root.after(1000, self.update_clock)
+
+    def get_stock_codes_path(self):
+        """종목 코드 파일 경로 반환"""
+        return os.path.join(os.path.dirname(os.path.abspath(__file__)), 'stocks.txt')
+
+    def load_stock_codes(self):
+        """저장된 종목 코드 불러오기"""
+        try:
+            path = self.get_stock_codes_path()
+            if os.path.exists(path):
+                with open(path, 'r', encoding='utf-8') as f:
+                    codes = [line.strip() for line in f.readlines() if line.strip()]
+                    if codes:
+                        return codes
+        except:
+            pass
+        return self.default_stock_codes.copy()
+
+    def save_stock_codes(self):
+        """종목 코드 저장"""
+        try:
+            with open(self.get_stock_codes_path(), 'w', encoding='utf-8') as f:
+                for code in self.stock_codes:
+                    f.write(code + '\n')
+        except:
+            pass
+
+    def open_stock_settings(self, event=None):
+        """종목 코드 설정 창 열기"""
+        # 설정 창 생성
+        settings_win = tk.Toplevel(self.root)
+        settings_win.title("종목 설정")
+        settings_win.geometry("300x450")
+        settings_win.configure(bg='#1a1a2e')
+        settings_win.attributes('-topmost', True)
+
+        # 안내 라벨
+        tk.Label(
+            settings_win,
+            text="종목 코드 (한 줄에 하나씩)",
+            font=('맑은 고딕', 10),
+            fg='#00d9ff',
+            bg='#1a1a2e'
+        ).pack(pady=(15, 5))
+
+        # 버튼 프레임 (하단에 먼저 배치)
+        btn_frame = tk.Frame(settings_win, bg='#1a1a2e')
+        btn_frame.pack(side='bottom', pady=15)
+
+        # 텍스트 입력 영역
+        text_frame = tk.Frame(settings_win, bg='#1a1a2e')
+        text_frame.pack(fill='both', expand=True, padx=15, pady=5)
+
+        text_input = tk.Text(
+            text_frame,
+            font=('Consolas', 11),
+            fg='#ffffff',
+            bg='#2a2a4e',
+            insertbackground='#ffffff',
+            relief='flat',
+            wrap='word'
+        )
+        text_input.pack(fill='both', expand=True)
+
+        # 현재 종목 코드 표시
+        text_input.insert('1.0', '\n'.join(self.stock_codes))
+
+        def save_and_close():
+            # 새 종목 코드 가져오기
+            content = text_input.get('1.0', 'end-1c')
+            new_codes = [line.strip() for line in content.split('\n') if line.strip()]
+
+            if new_codes:
+                self.stock_codes = new_codes
+                self.save_stock_codes()
+                self.rebuild_stock_labels()
+                self.refresh_all_stocks()
+
+            settings_win.destroy()
+
+        def reset_to_default():
+            text_input.delete('1.0', 'end')
+            text_input.insert('1.0', '\n'.join(self.default_stock_codes))
+
+        # 저장 버튼
+        save_btn = tk.Button(
+            btn_frame,
+            text="저장",
+            font=('맑은 고딕', 10),
+            fg='#ffffff',
+            bg='#00d9ff',
+            activebackground='#00b8d4',
+            relief='flat',
+            width=8,
+            command=save_and_close
+        )
+        save_btn.pack(side='left', padx=5)
+
+        # 초기화 버튼
+        reset_btn = tk.Button(
+            btn_frame,
+            text="기본값",
+            font=('맑은 고딕', 10),
+            fg='#ffffff',
+            bg='#666666',
+            activebackground='#888888',
+            relief='flat',
+            width=8,
+            command=reset_to_default
+        )
+        reset_btn.pack(side='left', padx=5)
+
+        # 취소 버튼
+        cancel_btn = tk.Button(
+            btn_frame,
+            text="취소",
+            font=('맑은 고딕', 10),
+            fg='#ffffff',
+            bg='#666666',
+            activebackground='#888888',
+            relief='flat',
+            width=8,
+            command=settings_win.destroy
+        )
+        cancel_btn.pack(side='left', padx=5)
+
+    def rebuild_stock_labels(self):
+        """종목 라벨 재생성"""
+        # 기존 라벨들 제거
+        for code in list(self.stock_frames.keys()):
+            self.stock_frames[code].destroy()
+
+        self.stock_labels = {}
+        self.stock_frames = {}
+        self.individual_stocks = {}
+
+        # 새 라벨들 생성
+        for code in self.stock_codes:
+            row_frame = tk.Frame(self.frame, bg='#1a1a2e')
+            row_frame.pack(fill='x', pady=1)
+
+            name_label = tk.Label(
+                row_frame,
+                font=('맑은 고딕', 10),
+                fg='#ffffff',
+                bg='#1a1a2e',
+                text=f'{code}',
+                width=12,
+                anchor='e'
+            )
+            name_label.pack(side='left')
+
+            price_label = tk.Label(
+                row_frame,
+                font=('맑은 고딕', 10),
+                fg='#888888',
+                bg='#1a1a2e',
+                text=' 로딩중...',
+                anchor='w'
+            )
+            price_label.pack(side='left')
+
+            self.stock_frames[code] = row_frame
+            self.stock_labels[code] = {'name': name_label, 'price': price_label}
+
+            # 드래그 이벤트 바인딩
+            for widget in [row_frame, name_label, price_label]:
+                widget.bind('<Button-1>', self.start_move)
+                widget.bind('<B1-Motion>', self.on_move)
 
     def get_memo_path(self):
         """메모 파일 경로 반환"""
@@ -346,14 +545,24 @@ class DigitalClock:
 
     def fetch_stock(self):
         """KOSPI/KOSDAQ 지수를 가져오는 함수"""
+        import time
+
         try:
-            headers = {'User-Agent': 'Mozilla/5.0'}
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Accept': 'application/json, text/plain, */*',
+                'Accept-Language': 'ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7',
+                'Referer': 'https://m.stock.naver.com/',
+                'Origin': 'https://m.stock.naver.com',
+            }
 
             # KOSPI
             kospi_url = "https://m.stock.naver.com/api/index/KOSPI/basic"
             req = urllib.request.Request(kospi_url, headers=headers)
             with urllib.request.urlopen(req, timeout=10) as response:
                 kospi_data = json.loads(response.read().decode('utf-8'))
+
+            time.sleep(0.3)  # 요청 사이 딜레이
 
             # KOSDAQ
             kosdaq_url = "https://m.stock.naver.com/api/index/KOSDAQ/basic"
@@ -441,6 +650,141 @@ class DigitalClock:
         # 10분마다 날씨 업데이트
         self.root.after(600000, self.update_weather)
 
+    def fetch_hourly_temps(self):
+        """기상청 단기예보 API로 24시간 온도 데이터를 가져오는 함수"""
+        try:
+            service_key = "60eeaa7e0daa6de920e664e2ae499b1424412363224ec49c63832ff5051a23cd"
+            nx, ny = 60, 127
+
+            # base_time 계산 (02, 05, 08, 11, 14, 17, 20, 23시)
+            now = datetime.now()
+            base_times = [2, 5, 8, 11, 14, 17, 20, 23]
+
+            # 현재 시간에서 가장 가까운 이전 base_time 찾기
+            current_hour = now.hour
+            base_hour = 23  # 기본값
+            base_date = now
+
+            for bt in reversed(base_times):
+                if current_hour >= bt + 1:  # 발표 후 1시간 여유
+                    base_hour = bt
+                    break
+            else:
+                # 현재 시간이 03시 이전이면 전날 23시 사용
+                base_hour = 23
+                base_date = now - timedelta(days=1)
+
+            base_date_str = base_date.strftime('%Y%m%d')
+            base_time_str = f'{base_hour:02d}00'
+
+            url = f"http://apis.data.go.kr/1360000/VilageFcstInfoService_2.0/getVilageFcst?serviceKey={service_key}&numOfRows=300&pageNo=1&dataType=JSON&base_date={base_date_str}&base_time={base_time_str}&nx={nx}&ny={ny}"
+
+            req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+            with urllib.request.urlopen(req, timeout=15) as response:
+                data = json.loads(response.read().decode('utf-8'))
+
+                items = data['response']['body']['items']['item']
+
+                # TMP(기온) 데이터만 추출하고 시간순 정렬
+                temps = []
+                for item in items:
+                    if item['category'] == 'TMP':
+                        fcst_date = item['fcstDate']
+                        fcst_time = item['fcstTime']
+                        temp_value = int(item['fcstValue'])
+                        temps.append({
+                            'datetime': f"{fcst_date}{fcst_time}",
+                            'hour': fcst_time[:2],
+                            'temp': temp_value
+                        })
+
+                # 시간순 정렬 후 24개만
+                temps.sort(key=lambda x: x['datetime'])
+                self.hourly_temps = temps[:24]
+
+                # 그래프 업데이트
+                self.root.after(0, self.draw_temp_graph)
+        except Exception as e:
+            self.hourly_temps = []
+
+    def update_hourly_temps(self):
+        """백그라운드에서 24시간 온도 예보 업데이트"""
+        thread = threading.Thread(target=self.fetch_hourly_temps, daemon=True)
+        thread.start()
+        # 1시간마다 업데이트
+        self.root.after(3600000, self.update_hourly_temps)
+
+    def draw_temp_graph(self):
+        """24시간 온도 그래프 그리기"""
+        self.temp_canvas.delete('all')
+
+        if not self.hourly_temps or len(self.hourly_temps) < 2:
+            self.temp_canvas.create_text(
+                140, 30, text='온도 데이터 로딩중...',
+                fill='#888888', font=('맑은 고딕', 9)
+            )
+            return
+
+        temps = [t['temp'] for t in self.hourly_temps]
+        hours = [t['hour'] for t in self.hourly_temps]
+
+        # 그래프 영역 설정
+        width = 280
+        height = 60
+        padding_x = 15
+        padding_y = 12
+        graph_width = width - 2 * padding_x
+        graph_height = height - 2 * padding_y
+
+        min_temp = min(temps)
+        max_temp = max(temps)
+        temp_range = max_temp - min_temp if max_temp != min_temp else 1
+
+        # 포인트 계산
+        points = []
+        for i, temp in enumerate(temps):
+            x = padding_x + (i / (len(temps) - 1)) * graph_width
+            y = padding_y + (1 - (temp - min_temp) / temp_range) * graph_height
+            points.append((x, y))
+
+        # 그라데이션 효과를 위한 영역 채우기
+        fill_points = points.copy()
+        fill_points.append((points[-1][0], height - 5))
+        fill_points.append((points[0][0], height - 5))
+        flat_fill = [coord for point in fill_points for coord in point]
+        self.temp_canvas.create_polygon(flat_fill, fill='#1e3a5f', outline='')
+
+        # 선 그리기
+        for i in range(len(points) - 1):
+            self.temp_canvas.create_line(
+                points[i][0], points[i][1],
+                points[i+1][0], points[i+1][1],
+                fill='#00d9ff', width=2
+            )
+
+        # 최고/최저 온도 표시
+        max_idx = temps.index(max_temp)
+        min_idx = temps.index(min_temp)
+
+        self.temp_canvas.create_text(
+            points[max_idx][0], points[max_idx][1] - 8,
+            text=f'{max_temp}°', fill='#ff6b6b', font=('맑은 고딕', 8, 'bold')
+        )
+        self.temp_canvas.create_text(
+            points[min_idx][0], points[min_idx][1] + 10,
+            text=f'{min_temp}°', fill='#4dabf7', font=('맑은 고딕', 8, 'bold')
+        )
+
+        # 시작/끝 시간 표시
+        self.temp_canvas.create_text(
+            padding_x, height - 3,
+            text=f'{hours[0]}시', fill='#666666', font=('맑은 고딕', 7), anchor='w'
+        )
+        self.temp_canvas.create_text(
+            width - padding_x, height - 3,
+            text=f'{hours[-1]}시', fill='#666666', font=('맑은 고딕', 7), anchor='e'
+        )
+
     def update_stock(self):
         """백그라운드에서 주식 지수 업데이트"""
         thread = threading.Thread(target=self.fetch_stock, daemon=True)
@@ -448,58 +792,94 @@ class DigitalClock:
         # 1분마다 주식 업데이트
         self.root.after(60000, self.update_stock)
 
+    def fetch_single_stock(self, code, headers):
+        """단일 종목 정보를 가져오는 함수"""
+        import time
+
+        max_retries = 2
+        for attempt in range(max_retries):
+            try:
+                url = f"https://m.stock.naver.com/api/stock/{code}/basic"
+                req = urllib.request.Request(url, headers=headers)
+                with urllib.request.urlopen(req, timeout=5) as response:
+                    data = json.loads(response.read().decode('utf-8'))
+
+                name = data.get('stockName', code)
+                price = data.get('closePrice', '0')
+                change = data.get('compareToPreviousClosePrice', '0')
+                rate = data.get('fluctuationsRatio', '0')
+
+                arrow = "▲" if float(change) > 0 else "▼" if float(change) < 0 else ""
+                color = "up" if float(change) > 0 else "down" if float(change) < 0 else "flat"
+
+                self.individual_stocks[code] = {
+                    'name': name,
+                    'price': price,
+                    'change': abs(float(change)),
+                    'rate': rate,
+                    'arrow': arrow,
+                    'color': color
+                }
+                # 성공 시 즉시 해당 종목만 화면 업데이트
+                self.root.after(0, lambda c=code: self.update_single_stock_display(c))
+                return
+            except Exception:
+                if attempt < max_retries - 1:
+                    time.sleep(0.5)
+
+        # 모든 시도 실패
+        self.individual_stocks[code] = {
+            'name': f'[{code}]',
+            'price': '-',
+            'change': 0,
+            'rate': '-',
+            'arrow': '',
+            'color': 'error'
+        }
+        self.root.after(0, lambda c=code: self.update_single_stock_display(c))
+
     def fetch_individual_stocks(self):
-        """개별 종목 정보를 가져오는 함수"""
-        try:
-            headers = {'User-Agent': 'Mozilla/5.0'}
-            for code in self.stock_codes:
-                # 이미 성공한 종목은 다시 시도
-                # 실패한 종목도 재시도
-                max_retries = 3
-                for attempt in range(max_retries):
-                    try:
-                        url = f"https://m.stock.naver.com/api/stock/{code}/basic"
-                        req = urllib.request.Request(url, headers=headers)
-                        with urllib.request.urlopen(req, timeout=10) as response:
-                            data = json.loads(response.read().decode('utf-8'))
+        """개별 종목 정보를 병렬로 가져오는 함수"""
+        from concurrent.futures import ThreadPoolExecutor, wait
 
-                        name = data.get('stockName', code)
-                        price = data.get('closePrice', '0')
-                        change = data.get('compareToPreviousClosePrice', '0')
-                        rate = data.get('fluctuationsRatio', '0')
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'application/json, text/plain, */*',
+            'Accept-Language': 'ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7',
+            'Referer': 'https://m.stock.naver.com/',
+            'Origin': 'https://m.stock.naver.com',
+        }
 
-                        arrow = "▲" if float(change) > 0 else "▼" if float(change) < 0 else ""
-                        color = "up" if float(change) > 0 else "down" if float(change) < 0 else "flat"
+        # 최대 3개씩 병렬 처리 (rate limiting 방지)
+        with ThreadPoolExecutor(max_workers=3) as executor:
+            futures = [executor.submit(self.fetch_single_stock, code, headers) for code in self.stock_codes]
+            wait(futures)  # 모든 작업 완료 대기
 
-                        self.individual_stocks[code] = {
-                            'name': name,
-                            'price': price,
-                            'change': abs(float(change)),
-                            'rate': rate,
-                            'arrow': arrow,
-                            'color': color
-                        }
-                        break  # 성공하면 재시도 루프 종료
-                    except Exception:
-                        if attempt == max_retries - 1:
-                            # 마지막 시도도 실패하면 에러 상태 저장
-                            self.individual_stocks[code] = {
-                                'name': f'[{code}]',
-                                'price': '-',
-                                'change': 0,
-                                'rate': '-',
-                                'arrow': '',
-                                'color': 'error'
-                            }
-                        else:
-                            # 재시도 전 잠시 대기
-                            import time
-                            time.sleep(0.5)
+    def update_single_stock_display(self, code):
+        """단일 종목 화면 업데이트"""
+        if code not in self.stock_labels:
+            return
 
-            # 화면 업데이트
-            self.root.after(0, self.update_individual_stocks_display)
-        except:
-            pass
+        labels = self.stock_labels[code]
+        name_label = labels['name']
+        price_label = labels['price']
+
+        if code in self.individual_stocks:
+            stock = self.individual_stocks[code]
+            if stock['color'] == 'error':
+                name_label.config(text=stock['name'], fg='#888888')
+                price_label.config(text=' 로딩 실패', fg='#888888')
+            else:
+                name_label.config(text=stock['name'], fg='#ffffff')
+                price_text = f"  {stock['price']}  {stock['arrow']}{stock['change']:.0f} ({stock['rate']}%)"
+                price_label.config(text=price_text)
+
+                if stock['color'] == 'up':
+                    price_label.config(fg='#ff6b6b')
+                elif stock['color'] == 'down':
+                    price_label.config(fg='#4dabf7')
+                else:
+                    price_label.config(fg='#ffffff')
 
     def update_individual_stocks_display(self):
         """개별 종목 화면 업데이트"""

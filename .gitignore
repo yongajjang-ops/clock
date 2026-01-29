@@ -1,2 +1,8 @@
 memo.txt
 alpha.txt
+stocks.txt
+
+# PyInstaller
+build/
+dist/
+*.spec
