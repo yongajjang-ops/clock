@@ -118,8 +118,8 @@ class DigitalClock:
             fg='#000000',
             bg='#ffffff',
             insertbackground='#000000',
-            height=3,
-            width=30,
+            height=4,
+            width=40,
             relief='flat',
             wrap='word'
         )
@@ -181,7 +181,7 @@ class DigitalClock:
         for code in self.stock_codes:
             # 각 종목을 담을 프레임
             row_frame = tk.Frame(self.frame, bg='#1a1a2e')
-            row_frame.pack(fill='x', pady=1)
+            row_frame.pack(fill='x', pady=1, padx=(15, 0))
 
             # 종목명 라벨 (오른쪽 정렬, 고정 너비)
             name_label = tk.Label(
@@ -190,7 +190,7 @@ class DigitalClock:
                 fg='#ffffff',
                 bg='#1a1a2e',
                 text=f'{code}',
-                width=12,
+                width=14,
                 anchor='e'  # 오른쪽 정렬
             )
             name_label.pack(side='left')
@@ -308,6 +308,29 @@ class DigitalClock:
     def get_stock_codes_path(self):
         """종목 코드 파일 경로 반환"""
         return os.path.join(os.path.dirname(os.path.abspath(__file__)), 'stocks.txt')
+
+    def get_stock_cache_path(self):
+        """주식 캐시 파일 경로 반환"""
+        return os.path.join(os.path.dirname(os.path.abspath(__file__)), 'stock_cache.json')
+
+    def load_stock_cache(self):
+        """저장된 주식 캐시 불러오기"""
+        try:
+            cache_path = self.get_stock_cache_path()
+            if os.path.exists(cache_path):
+                with open(cache_path, 'r', encoding='utf-8') as f:
+                    return json.load(f)
+        except:
+            pass
+        return {}
+
+    def save_stock_cache(self):
+        """주식 캐시 저장"""
+        try:
+            with open(self.get_stock_cache_path(), 'w', encoding='utf-8') as f:
+                json.dump(self.individual_stocks, f, ensure_ascii=False, indent=2)
+        except:
+            pass
 
     def load_stock_codes(self):
         """저장된 종목 코드 불러오기"""
@@ -443,7 +466,7 @@ class DigitalClock:
         # 새 라벨들 생성
         for code in self.stock_codes:
             row_frame = tk.Frame(self.frame, bg='#1a1a2e')
-            row_frame.pack(fill='x', pady=1)
+            row_frame.pack(fill='x', pady=1, padx=(15, 0))
 
             name_label = tk.Label(
                 row_frame,
@@ -451,7 +474,7 @@ class DigitalClock:
                 fg='#ffffff',
                 bg='#1a1a2e',
                 text=f'{code}',
-                width=12,
+                width=14,
                 anchor='e'
             )
             name_label.pack(side='left')
@@ -478,6 +501,11 @@ class DigitalClock:
         """메모 파일 경로 반환"""
         return os.path.join(os.path.dirname(os.path.abspath(__file__)), 'memo.txt')
 
+    def starts_with_date(self, text):
+        """텍스트가 날짜 형식(YYYY.MM.DD)으로 시작하는지 확인"""
+        import re
+        return bool(re.match(r'^\d{4}\.\d{2}\.\d{2}', text.strip()))
+
     def save_memo(self, event=None):
         """메모 내용을 파일에 저장"""
         try:
@@ -488,15 +516,28 @@ class DigitalClock:
             pass
 
     def load_memo(self):
-        """파일에서 메모 내용 불러오기"""
+        """파일에서 메모 내용 불러오기, 앱 시작 시 오늘 날짜 표시"""
         try:
             memo_path = self.get_memo_path()
+            content = ""
             if os.path.exists(memo_path):
                 with open(memo_path, 'r', encoding='utf-8') as f:
                     content = f.read()
-                    self.memo_text.insert('1.0', content)
+
+            # 오늘 날짜
+            today_date = datetime.now().strftime('%Y.%m.%d ')
+
+            # 날짜로 시작하지 않으면 오늘 날짜를 앞에 추가
+            if not self.starts_with_date(content):
+                content = today_date + content.lstrip()
+
+            self.memo_text.insert('1.0', content)
+            # 커서를 맨 뒤로 이동
+            self.memo_text.mark_set('insert', 'end-1c')
         except:
-            pass
+            # 에러 시에도 오늘 날짜는 표시
+            today_date = datetime.now().strftime('%Y.%m.%d ')
+            self.memo_text.insert('1.0', today_date)
 
     def fetch_weather(self):
         """기상청 API로 날씨 정보를 가져오는 함수"""
@@ -544,7 +585,7 @@ class DigitalClock:
             self.weather_text = ""
 
     def fetch_stock(self):
-        """KOSPI/KOSDAQ 지수를 가져오는 함수"""
+        """네이버에서 KOSPI/KOSDAQ 지수를 가져오는 함수"""
         import time
 
         try:
@@ -562,7 +603,7 @@ class DigitalClock:
             with urllib.request.urlopen(req, timeout=10) as response:
                 kospi_data = json.loads(response.read().decode('utf-8'))
 
-            time.sleep(0.3)  # 요청 사이 딜레이
+            time.sleep(0.3)
 
             # KOSDAQ
             kosdaq_url = "https://m.stock.naver.com/api/index/KOSDAQ/basic"
@@ -698,8 +739,14 @@ class DigitalClock:
                             'temp': temp_value
                         })
 
-                # 시간순 정렬 후 24개만
+                # 시간순 정렬
                 temps.sort(key=lambda x: x['datetime'])
+
+                # 현재 시간 기준으로 필터링 (현재 시간 이후 데이터만)
+                current_datetime = now.strftime('%Y%m%d%H00')
+                temps = [t for t in temps if t['datetime'] >= current_datetime]
+
+                # 24개만 사용
                 self.hourly_temps = temps[:24]
 
                 # 그래프 업데이트
@@ -767,22 +814,34 @@ class DigitalClock:
         min_idx = temps.index(min_temp)
 
         self.temp_canvas.create_text(
-            points[max_idx][0], points[max_idx][1] - 8,
+            points[max_idx][0], points[max_idx][1] - 10,
             text=f'{max_temp}°', fill='#ff6b6b', font=('맑은 고딕', 8, 'bold')
         )
         self.temp_canvas.create_text(
-            points[min_idx][0], points[min_idx][1] + 10,
+            points[min_idx][0], points[min_idx][1] - 10,
             text=f'{min_temp}°', fill='#4dabf7', font=('맑은 고딕', 8, 'bold')
         )
 
         # 시작/끝 시간 표시
         self.temp_canvas.create_text(
             padding_x, height - 3,
-            text=f'{hours[0]}시', fill='#666666', font=('맑은 고딕', 7), anchor='w'
+            text=f'{hours[0]}시', fill='#aaaaaa', font=('맑은 고딕', 7), anchor='w'
         )
         self.temp_canvas.create_text(
             width - padding_x, height - 3,
-            text=f'{hours[-1]}시', fill='#666666', font=('맑은 고딕', 7), anchor='e'
+            text=f'{hours[-1]}시', fill='#aaaaaa', font=('맑은 고딕', 7), anchor='e'
+        )
+
+        # 시작 시간 온도 표시 (그래프 시작 포인트 위)
+        self.temp_canvas.create_text(
+            points[0][0], points[0][1] - 10,
+            text=f'{temps[0]}°', fill='#aaaaaa', font=('맑은 고딕', 8, 'bold')
+        )
+
+        # 끝 시간 온도 표시 (그래프 끝 포인트 위)
+        self.temp_canvas.create_text(
+            points[-1][0], points[-1][1] - 10,
+            text=f'{temps[-1]}°', fill='#aaaaaa', font=('맑은 고딕', 8, 'bold')
         )
 
     def update_stock(self):
@@ -792,16 +851,16 @@ class DigitalClock:
         # 1분마다 주식 업데이트
         self.root.after(60000, self.update_stock)
 
-    def fetch_single_stock(self, code, headers):
-        """단일 종목 정보를 가져오는 함수"""
+    def fetch_single_stock(self, code, headers, stock_cache):
+        """네이버에서 단일 종목 정보를 가져오는 함수"""
         import time
 
-        max_retries = 2
+        max_retries = 5
         for attempt in range(max_retries):
             try:
                 url = f"https://m.stock.naver.com/api/stock/{code}/basic"
                 req = urllib.request.Request(url, headers=headers)
-                with urllib.request.urlopen(req, timeout=5) as response:
+                with urllib.request.urlopen(req, timeout=10) as response:
                     data = json.loads(response.read().decode('utf-8'))
 
                 name = data.get('stockName', code)
@@ -809,37 +868,49 @@ class DigitalClock:
                 change = data.get('compareToPreviousClosePrice', '0')
                 rate = data.get('fluctuationsRatio', '0')
 
-                arrow = "▲" if float(change) > 0 else "▼" if float(change) < 0 else ""
-                color = "up" if float(change) > 0 else "down" if float(change) < 0 else "flat"
+                # 쉼표 제거 후 숫자 변환
+                change_val = float(change.replace(',', '')) if isinstance(change, str) else float(change)
+
+                arrow = "▲" if change_val > 0 else "▼" if change_val < 0 else ""
+                color = "up" if change_val > 0 else "down" if change_val < 0 else "flat"
 
                 self.individual_stocks[code] = {
                     'name': name,
                     'price': price,
-                    'change': abs(float(change)),
+                    'change': abs(change_val),
                     'rate': rate,
                     'arrow': arrow,
                     'color': color
                 }
-                # 성공 시 즉시 해당 종목만 화면 업데이트
+                # 성공 시 캐시 저장 및 화면 업데이트
                 self.root.after(0, lambda c=code: self.update_single_stock_display(c))
+                self.root.after(0, self.save_stock_cache)
                 return
-            except Exception:
+            except Exception as e:
                 if attempt < max_retries - 1:
-                    time.sleep(0.5)
+                    time.sleep(1.5)  # 재시도 간격 증가
 
-        # 모든 시도 실패
-        self.individual_stocks[code] = {
-            'name': f'[{code}]',
-            'price': '-',
-            'change': 0,
-            'rate': '-',
-            'arrow': '',
-            'color': 'error'
-        }
-        self.root.after(0, lambda c=code: self.update_single_stock_display(c))
+        # 모든 시도 실패 - 캐시에서 불러오기 시도
+        if code in stock_cache and stock_cache[code].get('color') != 'error':
+            cached = stock_cache[code].copy()
+            # 캐시 데이터임을 표시 (이름 앞에 ⏸ 추가, 중복 방지)
+            if not cached.get('name', '').startswith('⏸'):
+                cached['name'] = f"⏸ {cached.get('name', code)}"
+            self.individual_stocks[code] = cached
+            self.root.after(0, lambda c=code: self.update_single_stock_display(c))
+        else:
+            self.individual_stocks[code] = {
+                'name': f'[{code}]',
+                'price': '-',
+                'change': 0,
+                'rate': '-',
+                'arrow': '',
+                'color': 'error'
+            }
+            self.root.after(0, lambda c=code: self.update_single_stock_display(c))
 
     def fetch_individual_stocks(self):
-        """개별 종목 정보를 병렬로 가져오는 함수"""
+        """네이버에서 개별 종목 정보를 병렬로 가져오는 함수"""
         from concurrent.futures import ThreadPoolExecutor, wait
 
         headers = {
@@ -850,9 +921,12 @@ class DigitalClock:
             'Origin': 'https://m.stock.naver.com',
         }
 
-        # 최대 3개씩 병렬 처리 (rate limiting 방지)
-        with ThreadPoolExecutor(max_workers=3) as executor:
-            futures = [executor.submit(self.fetch_single_stock, code, headers) for code in self.stock_codes]
+        # 캐시 불러오기 (실패 시 fallback용)
+        stock_cache = self.load_stock_cache()
+
+        # 최대 2개씩 병렬 처리 (rate limiting 방지)
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            futures = [executor.submit(self.fetch_single_stock, code, headers, stock_cache) for code in self.stock_codes]
             wait(futures)  # 모든 작업 완료 대기
 
     def update_single_stock_display(self, code):
