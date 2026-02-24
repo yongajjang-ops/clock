@@ -4,6 +4,8 @@ import urllib.request
 import json
 import threading
 import os
+import html
+import re
 
 class DigitalClock:
     def __init__(self):
@@ -20,6 +22,8 @@ class DigitalClock:
         self.individual_stocks = {}
         self.default_stock_codes = ['395270', '144600', '473640', '161510', '000660', '005930', '229200']
         self.stock_codes = self.load_stock_codes()
+        # 반도체 뉴스 저장
+        self.semiconductor_news = []
 
         # 투명도 설정
         self.alpha = self.load_alpha()
@@ -209,11 +213,61 @@ class DigitalClock:
             self.stock_frames[code] = row_frame
             self.stock_labels[code] = {'name': name_label, 'price': price_label}
 
+        # 뉴스 구분선
+        self.news_separator = tk.Frame(self.frame, bg='#00d9ff', height=1)
+        self.news_separator.pack(fill='x', pady=(10, 5))
+
+        # 뉴스 헤더 프레임
+        self.news_header_frame = tk.Frame(self.frame, bg='#1a1a2e')
+        self.news_header_frame.pack()
+
+        # 뉴스 제목 라벨
+        self.news_title_label = tk.Label(
+            self.news_header_frame,
+            text='SEMICONDUCTOR NEWS',
+            font=('맑은 고딕', 9),
+            fg='#00d9ff',
+            bg='#1a1a2e'
+        )
+        self.news_title_label.pack(side='left')
+
+        # 뉴스 새로고침 버튼
+        self.news_refresh_btn = tk.Label(
+            self.news_header_frame,
+            text=' [새로고침]',
+            font=('맑은 고딕', 8),
+            fg='#888888',
+            bg='#1a1a2e',
+            cursor='hand2'
+        )
+        self.news_refresh_btn.pack(side='left')
+        self.news_refresh_btn.bind('<Button-1>', self.refresh_news)
+        self.news_refresh_btn.bind('<Enter>', lambda e: self.news_refresh_btn.config(fg='#00d9ff'))
+        self.news_refresh_btn.bind('<Leave>', lambda e: self.news_refresh_btn.config(fg='#888888'))
+
+        # 뉴스 라벨들 (5개)
+        self.news_labels = []
+        for i in range(5):
+            news_label = tk.Label(
+                self.frame,
+                font=('맑은 고딕', 9),
+                fg='#cccccc',
+                bg='#1a1a2e',
+                text='뉴스 로딩중...' if i == 0 else '',
+                anchor='w',
+                cursor='hand2'
+            )
+            news_label.pack(fill='x', pady=1, padx=5)
+            news_label.bind('<Enter>', lambda e, lbl=news_label: lbl.config(fg='#00d9ff'))
+            news_label.bind('<Leave>', lambda e, lbl=news_label: lbl.config(fg='#cccccc'))
+            self.news_labels.append(news_label)
+
         # 드래그 이벤트 바인딩
         drag_widgets = [self.frame, self.time_label, self.date_label,
                        self.day_label, self.temp_canvas, self.kospi_label, self.kosdaq_label,
                        self.separator, self.memo_separator, self.memo_label,
-                       self.stock_separator, self.stock_header_frame, self.stock_title_label]
+                       self.stock_separator, self.stock_header_frame, self.stock_title_label,
+                       self.news_separator, self.news_header_frame, self.news_title_label]
         # 주식 프레임과 라벨들 추가
         for code in self.stock_codes:
             drag_widgets.append(self.stock_frames[code])
@@ -243,6 +297,9 @@ class DigitalClock:
 
         # 개별 종목 업데이트 시작
         self.update_individual_stocks()
+
+        # 반도체 뉴스 업데이트 시작
+        self.update_news()
 
         # 시계 업데이트 시작
         self.update_clock()
@@ -463,10 +520,10 @@ class DigitalClock:
         self.stock_frames = {}
         self.individual_stocks = {}
 
-        # 새 라벨들 생성
+        # 새 라벨들 생성 (뉴스 섹션 앞에 배치)
         for code in self.stock_codes:
             row_frame = tk.Frame(self.frame, bg='#1a1a2e')
-            row_frame.pack(fill='x', pady=1, padx=(15, 0))
+            row_frame.pack(fill='x', pady=1, padx=(15, 0), before=self.news_separator)
 
             name_label = tk.Label(
                 row_frame,
@@ -779,7 +836,7 @@ class DigitalClock:
         width = 280
         height = 60
         padding_x = 15
-        padding_y = 12
+        padding_y = 15
         graph_width = width - 2 * padding_x
         graph_height = height - 2 * padding_y
 
@@ -988,10 +1045,159 @@ class DigitalClock:
         # 1분마다 업데이트
         self.root.after(60000, self.update_individual_stocks)
 
+    def get_solar_term(self, date):
+        """주어진 날짜가 24절기에 해당하는지 확인하고, 해당하면 (한글명, 한자명) 반환"""
+        year = date.year
+        month = date.month
+        day = date.day
+
+        # 24절기 데이터: (월, 한글명, 한자명, C상수)
+        # 각 월에 2개의 절기가 있음 (월 초와 월 중순)
+        solar_terms = [
+            (1, '소한', '小寒', 5.4055),
+            (1, '대한', '大寒', 20.12),
+            (2, '입춘', '立春', 3.87),
+            (2, '우수', '雨水', 18.73),
+            (3, '경칩', '驚蟄', 5.63),
+            (3, '춘분', '春分', 20.646),
+            (4, '청명', '淸明', 4.81),
+            (4, '곡우', '穀雨', 20.1),
+            (5, '입하', '立夏', 5.52),
+            (5, '소만', '小滿', 21.04),
+            (6, '망종', '芒種', 5.678),
+            (6, '하지', '夏至', 21.37),
+            (7, '소서', '小暑', 7.108),
+            (7, '대서', '大暑', 22.83),
+            (8, '입추', '立秋', 7.5),
+            (8, '처서', '處暑', 23.13),
+            (9, '백로', '白露', 7.646),
+            (9, '추분', '秋分', 23.042),
+            (10, '한로', '寒露', 8.318),
+            (10, '상강', '霜降', 23.438),
+            (11, '입동', '立冬', 7.438),
+            (11, '소설', '小雪', 22.36),
+            (12, '대설', '大雪', 7.18),
+            (12, '동지', '冬至', 21.94),
+        ]
+
+        # 연도의 마지막 두 자리
+        year_suffix = year % 100
+
+        # 해당 월의 절기만 확인
+        for term_month, korean_name, chinese_name, c_constant in solar_terms:
+            if term_month != month:
+                continue
+
+            # 절기 날짜 계산 공식: D = int(Y × 0.2422 + C) - int((Y-1) / 4)
+            # 21세기 기준 (2000년 이후)
+            calculated_day = int(year_suffix * 0.2422 + c_constant) - int((year_suffix - 1) // 4)
+
+            if calculated_day == day:
+                return (korean_name, chinese_name)
+
+        return None
+
+    def fetch_news(self):
+        """구글 뉴스 RSS로 반도체 뉴스를 가져오는 함수"""
+        try:
+            # 구글 뉴스 RSS
+            query = urllib.request.quote('반도체')
+            url = f"https://news.google.com/rss/search?q={query}&hl=ko&gl=KR&ceid=KR:ko"
+
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            }
+
+            req = urllib.request.Request(url, headers=headers)
+            with urllib.request.urlopen(req, timeout=10) as response:
+                xml_content = response.read().decode('utf-8')
+
+            # RSS에서 뉴스 아이템 추출
+            news_items = []
+
+            # item 태그 내의 title과 link 추출
+            items = re.findall(r'<item>(.*?)</item>', xml_content, re.DOTALL)
+
+            for item in items[:5]:
+                title_match = re.search(r'<title>(.*?)</title>', item)
+                link_match = re.search(r'<link>(.*?)</link>', item)
+
+                if title_match and link_match:
+                    title = title_match.group(1)
+                    link = link_match.group(1)
+
+                    # HTML 엔티티 디코딩
+                    title = html.unescape(title)
+                    # CDATA 제거
+                    title = re.sub(r'<!\[CDATA\[(.*?)\]\]>', r'\1', title)
+                    # 불필요한 태그 제거
+                    title = re.sub(r'<[^>]+>', '', title)
+                    # 출처 제거 (예: " - 한국경제")
+                    title = re.sub(r'\s*-\s*[^-]+$', '', title)
+                    # 제목이 너무 길면 자르기 (한 줄에 맞게)
+                    if len(title) > 32:
+                        title = title[:30] + '..'
+
+                    news_items.append({'title': title, 'link': link})
+
+            if news_items:
+                self.semiconductor_news = news_items
+                self.root.after(0, self.update_news_display)
+
+        except Exception as e:
+            # 에러 시 기존 뉴스 유지
+            pass
+
+    def update_news_display(self):
+        """뉴스 화면 업데이트"""
+        for i, label in enumerate(self.news_labels):
+            if i < len(self.semiconductor_news):
+                news = self.semiconductor_news[i]
+                label.config(text=f"• {news['title']}")
+                # 클릭 이벤트 바인딩 (링크 열기)
+                label.bind('<Button-1>', lambda e, url=news['link']: self.open_news_link(url))
+            else:
+                label.config(text='')
+                label.unbind('<Button-1>')
+
+    def open_news_link(self, url):
+        """뉴스 링크 열기"""
+        import webbrowser
+        webbrowser.open(url)
+
+    def refresh_news(self, event=None):
+        """뉴스 새로고침"""
+        self.news_refresh_btn.config(text=' 로딩...', fg='#ffcc00')
+        for label in self.news_labels:
+            label.config(text='')
+        self.news_labels[0].config(text='뉴스 로딩중...')
+
+        def fetch_and_restore():
+            self.fetch_news()
+            self.root.after(0, lambda: self.news_refresh_btn.config(text=' [새로고침]', fg='#888888'))
+
+        thread = threading.Thread(target=fetch_and_restore, daemon=True)
+        thread.start()
+
+    def update_news(self):
+        """백그라운드에서 뉴스 업데이트"""
+        thread = threading.Thread(target=self.fetch_news, daemon=True)
+        thread.start()
+        # 10분마다 뉴스 업데이트
+        self.root.after(600000, self.update_news)
+
     def refresh_all_stocks(self, event=None):
         """모든 주식 정보 새로고침"""
         # 새로고침 중 표시
         self.refresh_btn.config(text=' 로딩...', fg='#ffcc00')
+
+        # stocks.txt에서 최신 종목 코드 다시 로드
+        new_codes = self.load_stock_codes()
+
+        # 종목 코드가 변경되었으면 라벨 재생성
+        if new_codes != self.stock_codes:
+            self.stock_codes = new_codes
+            self.rebuild_stock_labels()
 
         # 종목 라벨들 로딩 상태로 변경
         for code, labels in self.stock_labels.items():
@@ -1023,6 +1229,12 @@ class DigitalClock:
         time_str = now.strftime('%H:%M')
         date_str = now.strftime('%Y년 %m월 %d일')
         day_str = days[now.weekday()]
+
+        # 24절기 확인
+        solar_term_info = self.get_solar_term(now)
+        if solar_term_info:
+            korean_name, chinese_name = solar_term_info
+            date_str = f"{date_str} ({korean_name}, {chinese_name})"
 
         # 요일 + 날씨 표시
         if self.weather_text:
