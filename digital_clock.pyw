@@ -22,8 +22,10 @@ class DigitalClock:
         self.individual_stocks = {}
         self.default_stock_codes = ['395270', '144600', '473640', '161510', '000660', '005930', '229200']
         self.stock_codes = self.load_stock_codes()
-        # 반도체 뉴스 저장
+        # 뉴스 저장
         self.semiconductor_news = []
+        self.default_news_keyword = '반도체'
+        self.news_keyword = self.load_news_keyword()
 
         # 투명도 설정
         self.alpha = self.load_alpha()
@@ -75,9 +77,11 @@ class DigitalClock:
             width=280,
             height=60,
             bg='#1a1a2e',
-            highlightthickness=0
+            highlightthickness=0,
+            cursor='hand2'
         )
         self.temp_canvas.pack(pady=(5, 0))
+        self.temp_canvas.bind('<Button-1>', self.open_weather_link)
 
         # 구분선
         self.separator = tk.Frame(self.frame, bg='#00d9ff', height=1)
@@ -88,18 +92,22 @@ class DigitalClock:
             self.frame,
             font=('맑은 고딕', 11),
             fg='#ffffff',
-            bg='#1a1a2e'
+            bg='#1a1a2e',
+            cursor='hand2'
         )
         self.kospi_label.pack()
+        self.kospi_label.bind('<Button-1>', self.open_market_page)
 
         # KOSDAQ 라벨
         self.kosdaq_label = tk.Label(
             self.frame,
             font=('맑은 고딕', 11),
             fg='#ffffff',
-            bg='#1a1a2e'
+            bg='#1a1a2e',
+            cursor='hand2'
         )
         self.kosdaq_label.pack()
+        self.kosdaq_label.bind('<Button-1>', self.open_market_page)
 
         # 메모 구분선
         self.memo_separator = tk.Frame(self.frame, bg='#00d9ff', height=1)
@@ -147,9 +155,13 @@ class DigitalClock:
             text='MY STOCKS',
             font=('맑은 고딕', 9),
             fg='#00d9ff',
-            bg='#1a1a2e'
+            bg='#1a1a2e',
+            cursor='hand2'
         )
         self.stock_title_label.pack(side='left')
+        self.stock_title_label.bind('<Button-1>', self.open_stock_page)
+        self.stock_title_label.bind('<Enter>', lambda e: self.stock_title_label.config(fg='#ffffff'))
+        self.stock_title_label.bind('<Leave>', lambda e: self.stock_title_label.config(fg='#00d9ff'))
 
         # 새로고침 버튼
         self.refresh_btn = tk.Label(
@@ -224,12 +236,16 @@ class DigitalClock:
         # 뉴스 제목 라벨
         self.news_title_label = tk.Label(
             self.news_header_frame,
-            text='SEMICONDUCTOR NEWS',
+            text=f'NEWS: {self.news_keyword}',
             font=('맑은 고딕', 9),
             fg='#00d9ff',
-            bg='#1a1a2e'
+            bg='#1a1a2e',
+            cursor='hand2'
         )
         self.news_title_label.pack(side='left')
+        self.news_title_label.bind('<Button-1>', self.open_news_page)
+        self.news_title_label.bind('<Enter>', lambda e: self.news_title_label.config(fg='#ffffff'))
+        self.news_title_label.bind('<Leave>', lambda e: self.news_title_label.config(fg='#00d9ff'))
 
         # 뉴스 새로고침 버튼
         self.news_refresh_btn = tk.Label(
@@ -244,6 +260,20 @@ class DigitalClock:
         self.news_refresh_btn.bind('<Button-1>', self.refresh_news)
         self.news_refresh_btn.bind('<Enter>', lambda e: self.news_refresh_btn.config(fg='#00d9ff'))
         self.news_refresh_btn.bind('<Leave>', lambda e: self.news_refresh_btn.config(fg='#888888'))
+
+        # 뉴스 키워드 설정 버튼
+        self.news_settings_btn = tk.Label(
+            self.news_header_frame,
+            text=' [설정]',
+            font=('맑은 고딕', 8),
+            fg='#888888',
+            bg='#1a1a2e',
+            cursor='hand2'
+        )
+        self.news_settings_btn.pack(side='left')
+        self.news_settings_btn.bind('<Button-1>', self.open_news_settings)
+        self.news_settings_btn.bind('<Enter>', lambda e: self.news_settings_btn.config(fg='#00d9ff'))
+        self.news_settings_btn.bind('<Leave>', lambda e: self.news_settings_btn.config(fg='#888888'))
 
         # 뉴스 라벨들 (5개)
         self.news_labels = []
@@ -262,12 +292,11 @@ class DigitalClock:
             news_label.bind('<Leave>', lambda e, lbl=news_label: lbl.config(fg='#cccccc'))
             self.news_labels.append(news_label)
 
-        # 드래그 이벤트 바인딩
+        # 드래그 이벤트 바인딩 (클릭 링크용 위젯들은 제외)
         drag_widgets = [self.frame, self.time_label, self.date_label,
-                       self.day_label, self.temp_canvas, self.kospi_label, self.kosdaq_label,
-                       self.separator, self.memo_separator, self.memo_label,
-                       self.stock_separator, self.stock_header_frame, self.stock_title_label,
-                       self.news_separator, self.news_header_frame, self.news_title_label]
+                       self.day_label, self.separator, self.memo_separator, self.memo_label,
+                       self.stock_separator, self.stock_header_frame,
+                       self.news_separator, self.news_header_frame]
         # 주식 프레임과 라벨들 추가
         for code in self.stock_codes:
             drag_widgets.append(self.stock_frames[code])
@@ -361,6 +390,20 @@ class DigitalClock:
         if hasattr(self, '_alpha_timer'):
             self.root.after_cancel(self._alpha_timer)
         self._alpha_timer = self.root.after(1000, self.update_clock)
+
+    def is_stock_market_closed(self):
+        """주식 시장 휴장 시간인지 확인 (오후 3:40 ~ 다음날 오전 9:00)"""
+        now = datetime.now()
+        hour = now.hour
+        minute = now.minute
+
+        # 오후 3:40 ~ 자정: 휴장
+        if hour > 15 or (hour == 15 and minute >= 40):
+            return True
+        # 자정 ~ 오전 9:00: 휴장
+        if hour < 9:
+            return True
+        return False
 
     def get_stock_codes_path(self):
         """종목 코드 파일 경로 반환"""
@@ -903,8 +946,10 @@ class DigitalClock:
 
     def update_stock(self):
         """백그라운드에서 주식 지수 업데이트"""
-        thread = threading.Thread(target=self.fetch_stock, daemon=True)
-        thread.start()
+        # 휴장 시간에는 API 호출 안 함
+        if not self.is_stock_market_closed():
+            thread = threading.Thread(target=self.fetch_stock, daemon=True)
+            thread.start()
         # 1분마다 주식 업데이트
         self.root.after(60000, self.update_stock)
 
@@ -1040,8 +1085,10 @@ class DigitalClock:
 
     def update_individual_stocks(self):
         """백그라운드에서 개별 종목 업데이트"""
-        thread = threading.Thread(target=self.fetch_individual_stocks, daemon=True)
-        thread.start()
+        # 휴장 시간에는 API 호출 안 함
+        if not self.is_stock_market_closed():
+            thread = threading.Thread(target=self.fetch_individual_stocks, daemon=True)
+            thread.start()
         # 1분마다 업데이트
         self.root.after(60000, self.update_individual_stocks)
 
@@ -1097,11 +1144,147 @@ class DigitalClock:
 
         return None
 
+    def get_news_keyword_path(self):
+        """뉴스 키워드 파일 경로 반환"""
+        return os.path.join(os.path.dirname(os.path.abspath(__file__)), 'news_keyword.txt')
+
+    def load_news_keyword(self):
+        """저장된 뉴스 키워드 불러오기"""
+        try:
+            path = self.get_news_keyword_path()
+            if os.path.exists(path):
+                with open(path, 'r', encoding='utf-8') as f:
+                    keyword = f.read().strip()
+                    if keyword:
+                        return keyword
+        except:
+            pass
+        return self.default_news_keyword
+
+    def save_news_keyword(self):
+        """뉴스 키워드 저장"""
+        try:
+            with open(self.get_news_keyword_path(), 'w', encoding='utf-8') as f:
+                f.write(self.news_keyword)
+        except:
+            pass
+
+    def open_news_settings(self, event=None):
+        """뉴스 키워드 설정 창 열기"""
+        settings_win = tk.Toplevel(self.root)
+        settings_win.title("뉴스 키워드 설정")
+        settings_win.geometry("300x150")
+        settings_win.configure(bg='#1a1a2e')
+        settings_win.attributes('-topmost', True)
+
+        # 안내 라벨
+        tk.Label(
+            settings_win,
+            text="검색할 뉴스 키워드 입력",
+            font=('맑은 고딕', 10),
+            fg='#00d9ff',
+            bg='#1a1a2e'
+        ).pack(pady=(20, 10))
+
+        # 키워드 입력 필드
+        keyword_entry = tk.Entry(
+            settings_win,
+            font=('맑은 고딕', 12),
+            fg='#ffffff',
+            bg='#2a2a4e',
+            insertbackground='#ffffff',
+            relief='flat',
+            width=25
+        )
+        keyword_entry.pack(pady=5)
+        keyword_entry.insert(0, self.news_keyword)
+        keyword_entry.select_range(0, 'end')
+        keyword_entry.focus()
+
+        # 버튼 프레임
+        btn_frame = tk.Frame(settings_win, bg='#1a1a2e')
+        btn_frame.pack(pady=15)
+
+        def save_and_close():
+            new_keyword = keyword_entry.get().strip()
+            if new_keyword:
+                self.news_keyword = new_keyword
+                self.save_news_keyword()
+                self.news_title_label.config(text=f'NEWS: {self.news_keyword}')
+                self.refresh_news()
+            settings_win.destroy()
+
+        def reset_to_default():
+            keyword_entry.delete(0, 'end')
+            keyword_entry.insert(0, self.default_news_keyword)
+
+        # 저장 버튼
+        tk.Button(
+            btn_frame,
+            text="저장",
+            font=('맑은 고딕', 10),
+            fg='#ffffff',
+            bg='#00d9ff',
+            activebackground='#00b8d4',
+            relief='flat',
+            width=6,
+            command=save_and_close
+        ).pack(side='left', padx=5)
+
+        # 기본값 버튼
+        tk.Button(
+            btn_frame,
+            text="기본값",
+            font=('맑은 고딕', 10),
+            fg='#ffffff',
+            bg='#666666',
+            activebackground='#888888',
+            relief='flat',
+            width=6,
+            command=reset_to_default
+        ).pack(side='left', padx=5)
+
+        # 취소 버튼
+        tk.Button(
+            btn_frame,
+            text="취소",
+            font=('맑은 고딕', 10),
+            fg='#ffffff',
+            bg='#666666',
+            activebackground='#888888',
+            relief='flat',
+            width=6,
+            command=settings_win.destroy
+        ).pack(side='left', padx=5)
+
+        # Enter 키로 저장
+        keyword_entry.bind('<Return>', lambda e: save_and_close())
+
+    def is_similar_news(self, title1, title2, threshold=0.4):
+        """두 뉴스 제목이 유사한지 판단 (단어 기반 유사도)"""
+        # 특수문자 제거하고 단어 추출
+        words1 = set(re.findall(r'[가-힣a-zA-Z0-9]+', title1.lower()))
+        words2 = set(re.findall(r'[가-힣a-zA-Z0-9]+', title2.lower()))
+
+        # 1글자 단어 제거 (조사 등)
+        words1 = {w for w in words1 if len(w) > 1}
+        words2 = {w for w in words2 if len(w) > 1}
+
+        if not words1 or not words2:
+            return False
+
+        # Jaccard 유사도 계산
+        intersection = len(words1 & words2)
+        union = len(words1 | words2)
+        similarity = intersection / union if union > 0 else 0
+
+        return similarity >= threshold
+
     def fetch_news(self):
-        """구글 뉴스 RSS로 반도체 뉴스를 가져오는 함수"""
+        """구글 뉴스 RSS로 뉴스를 가져오는 함수"""
         try:
             # 구글 뉴스 RSS
-            query = urllib.request.quote('반도체')
+            query = urllib.request.quote(self.news_keyword)
             url = f"https://news.google.com/rss/search?q={query}&hl=ko&gl=KR&ceid=KR:ko"
 
             headers = {
@@ -1118,7 +1301,11 @@ class DigitalClock:
             # item 태그 내의 title과 link 추출
             items = re.findall(r'<item>(.*?)</item>', xml_content, re.DOTALL)
 
-            for item in items[:5]:
+            for item in items:
+                # 5개 모으면 종료
+                if len(news_items) >= 5:
+                    break
+
                 title_match = re.search(r'<title>(.*?)</title>', item)
                 link_match = re.search(r'<link>(.*?)</link>', item)
 
@@ -1133,12 +1320,28 @@ class DigitalClock:
                     # 불필요한 태그 제거
                     title = re.sub(r'<[^>]+>', '', title)
                     # 출처 제거 (예: " - 한국경제")
-                    title = re.sub(r'\s*-\s*[^-]+$', '', title)
-                    # 제목이 너무 길면 자르기 (한 줄에 맞게)
-                    if len(title) > 32:
-                        title = title[:30] + '..'
+                    title_clean = re.sub(r'\s*-\s*[^-]+$', '', title)
 
-                    news_items.append({'title': title, 'link': link})
+                    # 유사한 기사가 이미 있는지 확인
+                    is_duplicate = False
+                    for existing in news_items:
+                        if self.is_similar_news(title_clean, existing['title_full']):
+                            is_duplicate = True
+                            break
+
+                    if is_duplicate:
+                        continue
+
+                    # 제목이 너무 길면 자르기 (한 줄에 맞게)
+                    title_display = title_clean
+                    if len(title_display) > 32:
+                        title_display = title_display[:30] + '..'
+
+                    news_items.append({
+                        'title': title_display,
+                        'title_full': title_clean,  # 유사도 비교용 전체 제목
+                        'link': link
+                    })
 
             if news_items:
                 self.semiconductor_news = news_items
@@ -1165,6 +1368,27 @@ class DigitalClock:
         import webbrowser
         webbrowser.open(url)
 
+    def open_weather_link(self, event=None):
+        """네이버 날씨 페이지 열기"""
+        import webbrowser
+        webbrowser.open('https://weather.naver.com/')
+
+    def open_stock_page(self, event=None):
+        """네이버 모바일 주식 페이지 열기"""
+        import webbrowser
+        webbrowser.open('https://m.stock.naver.com/')
+
+    def open_news_page(self, event=None):
+        """구글 뉴스 페이지 열기 (현재 키워드로 검색)"""
+        import webbrowser
+        query = urllib.request.quote(self.news_keyword)
+        webbrowser.open(f'https://news.google.com/search?q={query}&hl=ko&gl=KR&ceid=KR:ko')
+
+    def open_market_page(self, event=None):
+        """네이버 증시 페이지 열기"""
+        import webbrowser
+        webbrowser.open('https://finance.naver.com/sise/')
+
     def refresh_news(self, event=None):
         """뉴스 새로고침"""
         self.news_refresh_btn.config(text=' 로딩...', fg='#ffcc00')
@@ -1188,6 +1412,10 @@ class DigitalClock:
 
     def refresh_all_stocks(self, event=None):
         """모든 주식 정보 새로고침"""
+        # 휴장 시간에는 API 호출 안 함
+        if self.is_stock_market_closed():
+            return
+
         # 새로고침 중 표시
         self.refresh_btn.config(text=' 로딩...', fg='#ffcc00')
 
