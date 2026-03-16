@@ -6,6 +6,13 @@ import threading
 import os
 import html
 import re
+import io
+
+try:
+    from PIL import Image, ImageTk
+    PIL_AVAILABLE = True
+except ImportError:
+    PIL_AVAILABLE = False
 
 class DigitalClock:
     def __init__(self):
@@ -18,6 +25,10 @@ class DigitalClock:
         self.hourly_temps = []
         # 주식 지수 저장
         self.stock_info = None
+        # 지수 그래프 이미지 저장
+        self.kospi_chart_image = None
+        self.kosdaq_chart_image = None
+        self.current_index_chart = 'kospi'  # 현재 표시 중인 지수 ('kospi' 또는 'kosdaq')
         # 개별 종목 정보 저장
         self.individual_stocks = {}
         self.default_stock_codes = ['395270', '144600', '473640', '161510', '000660', '005930', '229200']
@@ -109,37 +120,59 @@ class DigitalClock:
         self.kosdaq_label.pack()
         self.kosdaq_label.bind('<Button-1>', self.open_market_page)
 
-        # 메모 구분선
-        self.memo_separator = tk.Frame(self.frame, bg='#00d9ff', height=1)
-        self.memo_separator.pack(fill='x', pady=(10, 5))
+        # 지수 그래프 헤더 프레임 (KOSPI/KOSDAQ 선택)
+        self.index_chart_header_frame = tk.Frame(self.frame, bg='#1a1a2e')
+        self.index_chart_header_frame.pack(pady=(5, 0))
 
-        # 메모 라벨
-        self.memo_label = tk.Label(
-            self.frame,
-            text='MEMO',
-            font=('맑은 고딕', 9),
+        # KOSPI 선택 버튼
+        self.kospi_chart_btn = tk.Label(
+            self.index_chart_header_frame,
+            text='KOSPI',
+            font=('맑은 고딕', 9, 'bold'),
             fg='#00d9ff',
+            bg='#1a1a2e',
+            cursor='hand2'
+        )
+        self.kospi_chart_btn.pack(side='left', padx=5)
+        self.kospi_chart_btn.bind('<Button-1>', lambda e: self.switch_index_chart('kospi'))
+
+        # 구분자
+        tk.Label(
+            self.index_chart_header_frame,
+            text='|',
+            font=('맑은 고딕', 9),
+            fg='#666666',
             bg='#1a1a2e'
-        )
-        self.memo_label.pack()
+        ).pack(side='left')
 
-        # 메모 입력 필드
-        self.memo_text = tk.Text(
+        # KOSDAQ 선택 버튼
+        self.kosdaq_chart_btn = tk.Label(
+            self.index_chart_header_frame,
+            text='KOSDAQ',
+            font=('맑은 고딕', 9),
+            fg='#666666',
+            bg='#1a1a2e',
+            cursor='hand2'
+        )
+        self.kosdaq_chart_btn.pack(side='left', padx=5)
+        self.kosdaq_chart_btn.bind('<Button-1>', lambda e: self.switch_index_chart('kosdaq'))
+
+        # 지수 그래프 라벨 (이미지 표시용)
+        self.index_chart_label = tk.Label(
             self.frame,
-            font=('맑은 고딕', 10),
-            fg='#000000',
-            bg='#ffffff',
-            insertbackground='#000000',
-            height=4,
-            width=40,
-            relief='flat',
-            wrap='word'
+            bg='#1a1a2e',
+            cursor='hand2'
         )
-        self.memo_text.pack(pady=(5, 0))
-        self.memo_text.bind('<KeyRelease>', self.save_memo)
+        self.index_chart_label.pack(pady=(2, 0))
+        self.index_chart_label.bind('<Button-1>', self.open_market_page)
 
-        # 메모 불러오기
-        self.load_memo()
+        # PIL 미설치 시 안내 표시
+        if not PIL_AVAILABLE:
+            self.index_chart_label.config(
+                text='차트 표시: pip install pillow',
+                fg='#888888',
+                font=('맑은 고딕', 8)
+            )
 
         # 개별 종목 구분선
         self.stock_separator = tk.Frame(self.frame, bg='#00d9ff', height=1)
@@ -292,11 +325,48 @@ class DigitalClock:
             news_label.bind('<Leave>', lambda e, lbl=news_label: lbl.config(fg='#cccccc'))
             self.news_labels.append(news_label)
 
+        # 메모 구분선
+        self.memo_separator = tk.Frame(self.frame, bg='#00d9ff', height=1)
+        self.memo_separator.pack(fill='x', pady=(10, 5))
+
+        # 메모 라벨
+        self.memo_label = tk.Label(
+            self.frame,
+            text='MEMO',
+            font=('맑은 고딕', 9),
+            fg='#00d9ff',
+            bg='#1a1a2e'
+        )
+        self.memo_label.pack()
+
+        # 메모 입력 필드
+        self.memo_frame = tk.Frame(self.frame, bg='#1a1a2e', width=350, height=70)
+        self.memo_frame.pack(pady=(5, 0))
+        self.memo_frame.pack_propagate(False)
+
+        self.memo_text = tk.Text(
+            self.memo_frame,
+            font=('맑은 고딕', 9),
+            fg='#000000',
+            bg='#ffffff',
+            insertbackground='#000000',
+            height=4,
+            relief='flat',
+            wrap='word'
+        )
+        self.memo_text.pack(fill='both', expand=True)
+        self.memo_text.bind('<KeyRelease>', self.save_memo)
+
+        # 메모 불러오기
+        self.load_memo()
+
         # 드래그 이벤트 바인딩 (클릭 링크용 위젯들은 제외)
         drag_widgets = [self.frame, self.time_label, self.date_label,
-                       self.day_label, self.separator, self.memo_separator, self.memo_label,
+                       self.day_label, self.separator,
                        self.stock_separator, self.stock_header_frame,
-                       self.news_separator, self.news_header_frame]
+                       self.index_chart_header_frame,
+                       self.news_separator, self.news_header_frame,
+                       self.memo_separator, self.memo_label]
         # 주식 프레임과 라벨들 추가
         for code in self.stock_codes:
             drag_widgets.append(self.stock_frames[code])
@@ -323,6 +393,9 @@ class DigitalClock:
 
         # 주식 지수 업데이트 시작
         self.update_stock()
+
+        # 지수 그래프 초기 상태 표시
+        self.draw_index_chart()
 
         # 개별 종목 업데이트 시작
         self.update_individual_stocks()
@@ -738,6 +811,96 @@ class DigitalClock:
         except Exception as e:
             self.stock_info = None
 
+    def fetch_index_chart(self):
+        """네이버 금융에서 KOSPI/KOSDAQ 차트 이미지를 가져오는 함수"""
+        if not PIL_AVAILABLE:
+            return
+
+        import time
+
+        try:
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                'Referer': 'https://finance.naver.com/',
+            }
+
+            # 캐시 방지를 위한 타임스탬프
+            timestamp = int(time.time() * 1000)
+
+            # 임시 변수에 먼저 저장 (깜빡임 방지)
+            temp_kospi_image = None
+            temp_kosdaq_image = None
+
+            # KOSPI 당일 차트 이미지
+            kospi_chart_url = f"https://ssl.pstatic.net/imgfinance/chart/sise/siseMainKOSPI.png?{timestamp}"
+            req = urllib.request.Request(kospi_chart_url, headers=headers)
+            with urllib.request.urlopen(req, timeout=10) as response:
+                image_data = response.read()
+                image = Image.open(io.BytesIO(image_data))
+                # 60% 크기로 축소
+                new_size = (int(image.width * 0.6), int(image.height * 0.6))
+                image = image.resize(new_size, Image.LANCZOS)
+                temp_kospi_image = ImageTk.PhotoImage(image)
+
+            time.sleep(0.2)
+
+            # KOSDAQ 당일 차트 이미지
+            kosdaq_chart_url = f"https://ssl.pstatic.net/imgfinance/chart/sise/siseMainKOSDAQ.png?{timestamp}"
+            req = urllib.request.Request(kosdaq_chart_url, headers=headers)
+            with urllib.request.urlopen(req, timeout=10) as response:
+                image_data = response.read()
+                image = Image.open(io.BytesIO(image_data))
+                # 60% 크기로 축소
+                new_size = (int(image.width * 0.6), int(image.height * 0.6))
+                image = image.resize(new_size, Image.LANCZOS)
+                temp_kosdaq_image = ImageTk.PhotoImage(image)
+
+            # 모두 준비되면 한 번에 교체 (메인 스레드에서)
+            def update_images():
+                self.kospi_chart_image = temp_kospi_image
+                self.kosdaq_chart_image = temp_kosdaq_image
+                self.draw_index_chart()
+
+            self.root.after(0, update_images)
+        except Exception as e:
+            pass
+
+    def switch_index_chart(self, index_type):
+        """지수 그래프 전환 (kospi/kosdaq)"""
+        self.current_index_chart = index_type
+
+        # 버튼 스타일 업데이트
+        if index_type == 'kospi':
+            self.kospi_chart_btn.config(fg='#00d9ff', font=('맑은 고딕', 9, 'bold'))
+            self.kosdaq_chart_btn.config(fg='#666666', font=('맑은 고딕', 9))
+        else:
+            self.kospi_chart_btn.config(fg='#666666', font=('맑은 고딕', 9))
+            self.kosdaq_chart_btn.config(fg='#00d9ff', font=('맑은 고딕', 9, 'bold'))
+
+        # 그래프 다시 그리기
+        self.draw_index_chart()
+
+    def draw_index_chart(self):
+        """지수 그래프 이미지 표시"""
+        if not PIL_AVAILABLE:
+            return
+
+        # 현재 선택된 지수 이미지
+        if self.current_index_chart == 'kospi':
+            chart_image = self.kospi_chart_image
+        else:
+            chart_image = self.kosdaq_chart_image
+
+        if chart_image:
+            self.index_chart_label.config(image=chart_image, text='')
+        else:
+            self.index_chart_label.config(
+                image='',
+                text='차트 로딩중...',
+                fg='#888888',
+                font=('맑은 고딕', 9)
+            )
+
     def update_stock_display(self):
         """주식 지수 화면 업데이트"""
         if hasattr(self, 'stock_info') and self.stock_info:
@@ -950,6 +1113,9 @@ class DigitalClock:
         if not self.is_stock_market_closed():
             thread = threading.Thread(target=self.fetch_stock, daemon=True)
             thread.start()
+            # 차트 데이터도 가져오기
+            chart_thread = threading.Thread(target=self.fetch_index_chart, daemon=True)
+            chart_thread.start()
         # 1분마다 주식 업데이트
         self.root.after(60000, self.update_stock)
 
@@ -1443,6 +1609,7 @@ class DigitalClock:
         # 백그라운드에서 데이터 가져오기
         def fetch_all():
             self.fetch_stock()
+            self.fetch_index_chart()
             self.fetch_individual_stocks()
             # 완료 후 버튼 복원
             self.root.after(0, lambda: self.refresh_btn.config(text=' [F5]', fg='#888888'))
