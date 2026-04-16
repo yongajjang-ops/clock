@@ -1,0 +1,1318 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="theme-color" content="#00d4ff">
+    <link rel="manifest" href="manifest.json">
+    <link rel="icon" type="image/svg+xml" href="icon.svg">
+    <link rel="apple-touch-icon" href="icon.svg">
+    <title>자전거 속도계</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: flex-start;
+            padding-top: 15px;
+            color: white;
+            padding-left: 15px;
+            padding-right: 15px;
+            overflow: hidden;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 400px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 3px;
+        }
+
+        .current-time {
+            font-size: 1.8rem;
+            font-weight: 700;
+            color: #ffffff;
+            font-variant-numeric: tabular-nums;
+            letter-spacing: 2px;
+            margin-bottom: 2px;
+            text-shadow: 0 0 10px rgba(255, 255, 255, 0.3);
+        }
+
+        .header h1 {
+            font-size: 1.3rem;
+            font-weight: 600;
+            color: #00d4ff;
+            text-shadow: 0 0 20px rgba(0, 212, 255, 0.5);
+        }
+
+        .status {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            font-size: 0.85rem;
+            color: #888;
+        }
+
+        .status-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #ff4444;
+            animation: pulse 2s infinite;
+        }
+
+        .status-dot.active {
+            background: #00ff88;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        /* 현재 속도 - 메인 디스플레이 */
+        .speed-main {
+            background: linear-gradient(145deg, #1e2a4a, #152238);
+            border-radius: 20px;
+            padding: 20px 15px;
+            text-align: center;
+            box-shadow:
+                0 15px 40px rgba(0, 0, 0, 0.5),
+                inset 0 1px 0 rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(0, 212, 255, 0.2);
+        }
+
+        .speed-value {
+            font-size: 4rem;
+            font-weight: 700;
+            color: #00ff88;
+            text-shadow: 0 0 40px rgba(0, 255, 136, 0.6);
+            line-height: 1;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .speed-unit {
+            font-size: 1.2rem;
+            color: #888;
+            margin-top: 3px;
+        }
+
+        .speed-label {
+            font-size: 0.8rem;
+            color: #00d4ff;
+            margin-top: 8px;
+            text-transform: uppercase;
+            letter-spacing: 3px;
+        }
+
+        /* 통계 그리드 */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 8px;
+        }
+
+        .stat-card {
+            background: linear-gradient(145deg, #1e2a4a, #152238);
+            border-radius: 15px;
+            padding: 12px 8px;
+            text-align: center;
+            box-shadow:
+                0 8px 20px rgba(0, 0, 0, 0.3),
+                inset 0 1px 0 rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .stat-value {
+            font-size: 1.4rem;
+            font-weight: 700;
+            color: #ffffff;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .stat-unit {
+            font-size: 0.65rem;
+            color: #666;
+        }
+
+        .stat-label {
+            font-size: 0.65rem;
+            color: #00d4ff;
+            margin-top: 5px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .stat-card.distance .stat-value {
+            color: #ffaa00;
+        }
+
+        .stat-card.max-speed .stat-value {
+            color: #ff6b6b;
+        }
+
+        .stat-card.avg-speed .stat-value {
+            color: #a855f7;
+        }
+
+        /* 컨트롤 버튼 */
+        .controls {
+            display: flex;
+            gap: 12px;
+            margin-top: 10px;
+        }
+
+        .btn {
+            flex: 1;
+            padding: 18px;
+            border: none;
+            border-radius: 15px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .btn-start {
+            background: linear-gradient(145deg, #00ff88, #00cc6a);
+            color: #000;
+            box-shadow: 0 10px 30px rgba(0, 255, 136, 0.3);
+        }
+
+        .btn-start:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 15px 40px rgba(0, 255, 136, 0.4);
+        }
+
+        .btn-start:active {
+            transform: translateY(0);
+        }
+
+        .btn-stop {
+            background: linear-gradient(145deg, #ff4444, #cc3333);
+            color: white;
+            box-shadow: 0 10px 30px rgba(255, 68, 68, 0.3);
+        }
+
+        .btn-stop:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 15px 40px rgba(255, 68, 68, 0.4);
+        }
+
+        .btn-reset {
+            background: linear-gradient(145deg, #444, #333);
+            color: white;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+        }
+
+        .btn-reset:hover {
+            transform: translateY(-2px);
+            background: linear-gradient(145deg, #555, #444);
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none !important;
+        }
+
+        /* 주행 시간/거리 표시 */
+        .session-stats {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 15px;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 15px;
+            gap: 20px;
+        }
+
+        .session-item {
+            text-align: center;
+            flex: 1;
+        }
+
+        .session-value {
+            font-size: 1.8rem;
+            font-weight: 600;
+            color: #00d4ff;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .session-unit {
+            font-size: 0.9rem;
+            color: #888;
+            margin-left: 2px;
+        }
+
+        .session-label {
+            font-size: 0.7rem;
+            color: #666;
+            margin-top: 5px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .session-divider {
+            width: 1px;
+            height: 40px;
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        /* 에러 메시지 */
+        .error-message {
+            background: rgba(255, 68, 68, 0.2);
+            border: 1px solid rgba(255, 68, 68, 0.5);
+            border-radius: 10px;
+            padding: 15px;
+            text-align: center;
+            color: #ff6b6b;
+            font-size: 0.9rem;
+            display: none;
+        }
+
+        .error-message.show {
+            display: block;
+        }
+
+        /* 주행 요약 모달 */
+        .summary-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 2000;
+            padding: 20px;
+        }
+
+        .summary-modal.hidden {
+            display: none;
+        }
+
+        .summary-content {
+            background: linear-gradient(145deg, #1e2a4a, #152238);
+            border-radius: 20px;
+            padding: 25px;
+            max-width: 350px;
+            width: 100%;
+            border: 1px solid rgba(0, 212, 255, 0.3);
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+        }
+
+        .summary-header {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        .summary-header h2 {
+            color: #00d4ff;
+            font-size: 1.3rem;
+            margin-bottom: 5px;
+        }
+
+        .summary-header p {
+            color: #888;
+            font-size: 0.85rem;
+        }
+
+        .summary-stats {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .summary-stat {
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 12px;
+            padding: 15px;
+            text-align: center;
+        }
+
+        .summary-stat-value {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: #00ff88;
+        }
+
+        .summary-stat-label {
+            font-size: 0.75rem;
+            color: #888;
+            margin-top: 5px;
+            text-transform: uppercase;
+        }
+
+        .summary-stat.distance .summary-stat-value {
+            color: #ffaa00;
+        }
+
+        .summary-stat.time .summary-stat-value {
+            color: #00d4ff;
+        }
+
+        .summary-stat.max .summary-stat-value {
+            color: #ff6b6b;
+        }
+
+        .summary-stat.avg .summary-stat-value {
+            color: #a855f7;
+        }
+
+        .summary-btn {
+            width: 100%;
+            padding: 15px;
+            border: none;
+            border-radius: 12px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            background: linear-gradient(145deg, #00d4ff, #0099cc);
+            color: #000;
+            transition: all 0.3s ease;
+        }
+
+        .summary-btn:hover {
+            transform: translateY(-2px);
+        }
+
+        /* GPS 정확도 표시 */
+        .accuracy {
+            text-align: center;
+            font-size: 0.75rem;
+            color: #666;
+        }
+
+        .accuracy span {
+            color: #00d4ff;
+        }
+
+        /* 전체 화면 시작 오버레이 */
+        .fullscreen-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            cursor: pointer;
+        }
+
+        .fullscreen-overlay.hidden {
+            display: none;
+        }
+
+        .fullscreen-icon {
+            font-size: 5rem;
+            margin-bottom: 30px;
+            animation: bounce 2s infinite;
+        }
+
+        .fullscreen-title {
+            font-size: 2rem;
+            color: #00d4ff;
+            margin-bottom: 15px;
+            text-align: center;
+        }
+
+        .fullscreen-subtitle {
+            font-size: 1rem;
+            color: #888;
+            text-align: center;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes bounce {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-15px); }
+        }
+
+        /* 전체화면 토글 버튼 */
+        .fullscreen-btn {
+            position: fixed;
+            top: 15px;
+            right: 15px;
+            width: 40px;
+            height: 40px;
+            background: rgba(0, 0, 0, 0.5);
+            border: 1px solid rgba(0, 212, 255, 0.3);
+            border-radius: 10px;
+            color: #00d4ff;
+            font-size: 1.2rem;
+            cursor: pointer;
+            z-index: 100;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s ease;
+        }
+
+        .fullscreen-btn:hover {
+            background: rgba(0, 212, 255, 0.2);
+        }
+
+        /* 화면 회전 방지 - 가로 모드일 때 강제 세로 표시 */
+        @media screen and (orientation: landscape) {
+            html {
+                transform: rotate(-90deg);
+                transform-origin: left top;
+                width: 100vh;
+                height: 100vw;
+                overflow-x: hidden;
+                position: absolute;
+                top: 100%;
+                left: 0;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- 주행 요약 모달 -->
+    <div class="summary-modal hidden" id="summaryModal">
+        <div class="summary-content">
+            <div class="summary-header">
+                <h2>🚴 주행이 자동 저장되었습니다</h2>
+                <p id="summaryDate">2024년 1월 1일 주행 기록</p>
+            </div>
+            <div class="summary-stats">
+                <div class="summary-stat distance">
+                    <div class="summary-stat-value" id="summaryDistance">0.00 km</div>
+                    <div class="summary-stat-label">주행 거리</div>
+                </div>
+                <div class="summary-stat time">
+                    <div class="summary-stat-value" id="summaryTime">00:00:00</div>
+                    <div class="summary-stat-label">주행 시간</div>
+                </div>
+                <div class="summary-stat max">
+                    <div class="summary-stat-value" id="summaryMaxSpeed">0.0 km/h</div>
+                    <div class="summary-stat-label">최고 속도</div>
+                </div>
+                <div class="summary-stat avg">
+                    <div class="summary-stat-value" id="summaryAvgSpeed">0.0 km/h</div>
+                    <div class="summary-stat-label">평균 속도</div>
+                </div>
+            </div>
+            <button class="summary-btn" id="summaryCloseBtn">확인</button>
+        </div>
+    </div>
+
+    <!-- 전체 화면 시작 오버레이 -->
+    <div class="fullscreen-overlay" id="fullscreenOverlay">
+        <div class="fullscreen-icon">🚴</div>
+        <div class="fullscreen-title">자전거 속도계</div>
+        <div class="fullscreen-subtitle">화면을 터치하여 시작</div>
+    </div>
+
+    <!-- 전체화면 토글 버튼 -->
+    <button class="fullscreen-btn" id="fullscreenBtn" title="전체화면">⛶</button>
+
+    <div class="container">
+        <div class="header">
+            <div class="current-time" id="currentTime">00:00:00</div>
+            <h1>🚴 자전거 속도계</h1>
+            <div class="status">
+                <div class="status-dot" id="statusDot"></div>
+                <span id="statusText">GPS 대기중</span>
+            </div>
+        </div>
+
+        <div class="error-message" id="errorMessage"></div>
+
+        <div class="speed-main">
+            <div class="speed-value" id="currentSpeed">0.0</div>
+            <div class="speed-unit">km/h</div>
+            <div class="speed-label">현재 속도</div>
+        </div>
+
+        <div class="stats-grid">
+            <div class="stat-card distance" id="distanceCard" title="길게 눌러서 초기화">
+                <div class="stat-value"><span id="totalDistance">0.00</span></div>
+                <div class="stat-unit">km</div>
+                <div class="stat-label">누적거리</div>
+            </div>
+            <div class="stat-card max-speed">
+                <div class="stat-value"><span id="maxSpeed">0.0</span></div>
+                <div class="stat-unit">km/h</div>
+                <div class="stat-label">최고속도</div>
+            </div>
+            <div class="stat-card avg-speed">
+                <div class="stat-value"><span id="avgSpeed">0.0</span></div>
+                <div class="stat-unit">km/h</div>
+                <div class="stat-label">평균속도</div>
+            </div>
+        </div>
+
+        <div class="session-stats">
+            <div class="session-item">
+                <div class="session-value" id="elapsedTime">00:00:00</div>
+                <div class="session-label">주행 시간</div>
+            </div>
+            <div class="session-divider"></div>
+            <div class="session-item">
+                <div class="session-value" id="sessionDistance">0.00<span class="session-unit">km</span></div>
+                <div class="session-label">주행 거리</div>
+            </div>
+        </div>
+
+        <div class="accuracy" id="accuracyInfo">
+            GPS 정확도: <span>--</span>m
+        </div>
+
+        <div class="controls">
+            <button class="btn btn-start" id="btnStart">시작</button>
+            <button class="btn btn-reset" id="btnReset">초기화</button>
+        </div>
+    </div>
+
+    <script>
+        // DOM 요소
+        const currentSpeedEl = document.getElementById('currentSpeed');
+        const totalDistanceEl = document.getElementById('totalDistance');
+        const sessionDistanceEl = document.getElementById('sessionDistance');
+        const maxSpeedEl = document.getElementById('maxSpeed');
+        const avgSpeedEl = document.getElementById('avgSpeed');
+        const elapsedTimeEl = document.getElementById('elapsedTime');
+        const accuracyInfoEl = document.getElementById('accuracyInfo');
+        const statusDot = document.getElementById('statusDot');
+        const statusText = document.getElementById('statusText');
+        const errorMessage = document.getElementById('errorMessage');
+        const btnStart = document.getElementById('btnStart');
+        const btnReset = document.getElementById('btnReset');
+        const currentTimeEl = document.getElementById('currentTime');
+
+        // 현재 시간 업데이트
+        function updateCurrentTime() {
+            const now = new Date();
+            const hours = now.getHours().toString().padStart(2, '0');
+            const minutes = now.getMinutes().toString().padStart(2, '0');
+            const seconds = now.getSeconds().toString().padStart(2, '0');
+            currentTimeEl.textContent = `${hours}:${minutes}:${seconds}`;
+        }
+
+        // 현재 시간 타이머 시작
+        updateCurrentTime();
+        setInterval(updateCurrentTime, 1000);
+
+        // 상태 변수
+        let isTracking = false;
+        let watchId = null;
+        let startTime = null;
+        let elapsedSeconds = 0;
+        let timerInterval = null;
+        let lastPosition = null;
+        let totalDistance = 0;    // 누적 거리 (미터 단위)
+        let sessionDistance = 0;  // 세션 거리 (미터 단위)
+        let maxSpeed = 0;         // km/h 단위
+        let speedSamples = [];    // 평균 속도 계산용
+        let voiceAnnouncementInterval = null;  // 음성 안내 타이머
+        let currentSpeedValue = 0;  // 현재 속도 저장용
+        let lastMovementTime = null;  // 마지막 이동 감지 시간
+        let autoStopCheckInterval = null;  // 자동 종료 체크 타이머
+        const AUTO_STOP_TIMEOUT = 300000;  // 5분 (300초)
+
+        // 음성 안내 함수
+        function speakAnnouncement(text) {
+            if ('speechSynthesis' in window) {
+                // 이전 음성 중지
+                window.speechSynthesis.cancel();
+
+                const utterance = new SpeechSynthesisUtterance(text);
+                utterance.lang = 'ko-KR';
+                utterance.rate = 1.0;
+                utterance.pitch = 1.0;
+                utterance.volume = 1.0;
+
+                window.speechSynthesis.speak(utterance);
+            }
+        }
+
+        // 10분마다 음성 안내
+        function announceStatus() {
+            const now = new Date();
+            const hours = now.getHours();
+            const minutes = now.getMinutes();
+
+            // 현재 시간 포맷
+            const timeStr = `${hours}시 ${minutes}분`;
+
+            // 현재 속도
+            const speedStr = `${currentSpeedValue.toFixed(1)} 킬로미터`;
+
+            // 주행 거리 (세션 거리를 km로 변환)
+            const distanceKm = (sessionDistance / 1000).toFixed(2);
+            const distanceStr = `${distanceKm} 킬로미터`;
+
+            const announcement = `현재시간 ${timeStr}, 현재속도 ${speedStr}, 주행거리 ${distanceStr}`;
+
+            speakAnnouncement(announcement);
+        }
+
+        // 음성 안내 타이머 시작
+        function startVoiceAnnouncement() {
+            // 10분 = 600000ms
+            voiceAnnouncementInterval = setInterval(announceStatus, 600000);
+        }
+
+        // 음성 안내 타이머 정지
+        function stopVoiceAnnouncement() {
+            if (voiceAnnouncementInterval) {
+                clearInterval(voiceAnnouncementInterval);
+                voiceAnnouncementInterval = null;
+            }
+            // 음성 중지
+            if ('speechSynthesis' in window) {
+                window.speechSynthesis.cancel();
+            }
+        }
+
+        // 자동 종료 (5분간 움직임 없을 때)
+        function autoStop() {
+            if (isTracking) {
+                console.log('자동 종료: 5분간 움직임 없음');
+
+                // 평균 속도 계산
+                let avgSpeed = 0;
+                if (speedSamples.length > 0) {
+                    avgSpeed = speedSamples.reduce((a, b) => a + b, 0) / speedSamples.length;
+                }
+
+                // 자동 저장 데이터 저장
+                const autoSavedData = {
+                    date: new Date().toISOString(),
+                    sessionDistance: sessionDistance,
+                    elapsedSeconds: elapsedSeconds,
+                    maxSpeed: maxSpeed,
+                    avgSpeed: avgSpeed
+                };
+                localStorage.setItem('autoSavedSession', JSON.stringify(autoSavedData));
+
+                // 추적 종료
+                stopTracking();
+
+                // 상태 표시
+                statusText.textContent = '자동 종료됨';
+            }
+        }
+
+        // 자동 종료 체크 시작
+        function startAutoStopCheck() {
+            lastMovementTime = Date.now();
+            autoStopCheckInterval = setInterval(() => {
+                if (isTracking && Date.now() - lastMovementTime > AUTO_STOP_TIMEOUT) {
+                    autoStop();
+                }
+            }, 10000);  // 10초마다 체크
+        }
+
+        // 자동 종료 체크 정지
+        function stopAutoStopCheck() {
+            if (autoStopCheckInterval) {
+                clearInterval(autoStopCheckInterval);
+                autoStopCheckInterval = null;
+            }
+            lastMovementTime = null;
+        }
+
+        // 자동 저장된 세션 요약 표시
+        function showAutoSavedSummary() {
+            const saved = localStorage.getItem('autoSavedSession');
+            if (saved) {
+                const data = JSON.parse(saved);
+                const date = new Date(data.date);
+
+                // 날짜 포맷
+                const dateStr = `${date.getFullYear()}년 ${date.getMonth() + 1}월 ${date.getDate()}일 주행 기록`;
+                document.getElementById('summaryDate').textContent = dateStr;
+
+                // 주행 거리
+                document.getElementById('summaryDistance').textContent = (data.sessionDistance / 1000).toFixed(2) + ' km';
+
+                // 주행 시간
+                document.getElementById('summaryTime').textContent = formatTime(data.elapsedSeconds);
+
+                // 최고 속도
+                document.getElementById('summaryMaxSpeed').textContent = data.maxSpeed.toFixed(1) + ' km/h';
+
+                // 평균 속도
+                document.getElementById('summaryAvgSpeed').textContent = data.avgSpeed.toFixed(1) + ' km/h';
+
+                // 모달 표시
+                document.getElementById('summaryModal').classList.remove('hidden');
+
+                // 자동 저장 데이터 삭제
+                localStorage.removeItem('autoSavedSession');
+            }
+        }
+
+        // 요약 모달 닫기
+        document.getElementById('summaryCloseBtn').addEventListener('click', () => {
+            document.getElementById('summaryModal').classList.add('hidden');
+        });
+
+        // 로컬 스토리지에서 데이터 복원
+        function loadSavedData() {
+            const saved = localStorage.getItem('bikeSpeedometer');
+            if (saved) {
+                const data = JSON.parse(saved);
+                totalDistance = data.totalDistance || 0;
+                maxSpeed = data.maxSpeed || 0;
+                updateDisplay();
+            }
+        }
+
+        // 로컬 스토리지에 데이터 저장
+        function saveData() {
+            localStorage.setItem('bikeSpeedometer', JSON.stringify({
+                totalDistance,
+                maxSpeed
+            }));
+        }
+
+        // 세션 데이터 저장 (백그라운드 대응)
+        function saveSessionData() {
+            if (isTracking && startTime) {
+                localStorage.setItem('bikeSession', JSON.stringify({
+                    isTracking: true,
+                    startTime: startTime,
+                    elapsedSeconds: elapsedSeconds,
+                    sessionDistance: sessionDistance,
+                    speedSamples: speedSamples,
+                    maxSpeed: maxSpeed,
+                    lastPosition: lastPosition,
+                    savedAt: Date.now()
+                }));
+            }
+        }
+
+        // 세션 데이터 복원 (백그라운드에서 복귀 시)
+        function loadSessionData() {
+            const saved = localStorage.getItem('bikeSession');
+            if (saved) {
+                const data = JSON.parse(saved);
+                // 5분 이내에 저장된 데이터만 복원 (앱이 완전히 종료된 경우 제외)
+                if (data.savedAt && Date.now() - data.savedAt < 300000) {
+                    return data;
+                }
+            }
+            return null;
+        }
+
+        // 세션 데이터 삭제
+        function clearSessionData() {
+            localStorage.removeItem('bikeSession');
+        }
+
+        // 표시 업데이트
+        function updateDisplay() {
+            totalDistanceEl.textContent = (totalDistance / 1000).toFixed(2);
+            sessionDistanceEl.innerHTML = (sessionDistance / 1000).toFixed(2) + '<span class="session-unit">km</span>';
+            maxSpeedEl.textContent = maxSpeed.toFixed(1);
+
+            // 평균 속도 계산
+            if (speedSamples.length > 0) {
+                const avgSpeed = speedSamples.reduce((a, b) => a + b, 0) / speedSamples.length;
+                avgSpeedEl.textContent = avgSpeed.toFixed(1);
+            }
+        }
+
+        // 시간 포맷팅
+        function formatTime(seconds) {
+            const h = Math.floor(seconds / 3600);
+            const m = Math.floor((seconds % 3600) / 60);
+            const s = seconds % 60;
+            return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+        }
+
+        // 두 좌표 사이 거리 계산 (Haversine 공식)
+        function calculateDistance(lat1, lon1, lat2, lon2) {
+            const R = 6371000; // 지구 반지름 (미터)
+            const dLat = (lat2 - lat1) * Math.PI / 180;
+            const dLon = (lon2 - lon1) * Math.PI / 180;
+            const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+                      Math.sin(dLon / 2) * Math.sin(dLon / 2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+            return R * c;
+        }
+
+        // GPS 위치 업데이트 핸들러
+        function handlePosition(position) {
+            const { latitude, longitude, speed, accuracy } = position.coords;
+            const timestamp = position.timestamp;
+
+            // GPS 상태 업데이트
+            statusDot.classList.add('active');
+            statusText.textContent = 'GPS 연결됨';
+
+            // 정확도 표시
+            accuracyInfoEl.innerHTML = `GPS 정확도: <span>${accuracy.toFixed(0)}</span>m`;
+
+            // 현재 속도 (GPS에서 직접 제공하는 경우)
+            let currentSpeed = 0;
+
+            if (speed !== null && speed > 0) {
+                // GPS 속도 사용 (m/s -> km/h)
+                currentSpeed = speed * 3.6;
+            } else if (lastPosition) {
+                // 위치 변화로 속도 계산
+                const distance = calculateDistance(
+                    lastPosition.latitude, lastPosition.longitude,
+                    latitude, longitude
+                );
+                const timeDiff = (timestamp - lastPosition.timestamp) / 1000; // 초 단위
+
+                if (timeDiff > 0 && distance > 0) {
+                    currentSpeed = (distance / timeDiff) * 3.6; // m/s -> km/h
+                }
+            }
+
+            // 노이즈 필터링 (GPS 오차로 인한 비정상적인 속도 제거)
+            if (currentSpeed > 100) {
+                currentSpeed = 0; // 100km/h 이상은 자전거로 비현실적
+            }
+
+            // 정지 상태 감지 (1km/h 미만)
+            if (currentSpeed < 1) {
+                currentSpeed = 0;
+            }
+
+            // 속도 표시
+            currentSpeedEl.textContent = currentSpeed.toFixed(1);
+            currentSpeedValue = currentSpeed;  // 음성 안내용 속도 저장
+
+            // 거리 누적 (이동이 감지될 때)
+            if (lastPosition) {
+                const distance = calculateDistance(
+                    lastPosition.latitude, lastPosition.longitude,
+                    latitude, longitude
+                );
+                // GPS 정확도와 이동 거리 기반 필터링
+                // 최소 이동 거리: 정확도의 절반 이상 이동해야 유효한 이동으로 간주
+                const minDistance = Math.max(2, accuracy * 0.3);
+
+                // 비정상적으로 큰 이동 필터링 (100m 이하) & 노이즈 필터링
+                if (distance >= minDistance && distance < 100) {
+                    // 움직임 감지 - 마지막 이동 시간 업데이트
+                    lastMovementTime = Date.now();
+
+                    // 거리 누적
+                    totalDistance += distance;
+                    sessionDistance += distance;  // 세션 거리도 누적
+                }
+            }
+
+            // 최고 속도 업데이트
+            if (currentSpeed > maxSpeed) {
+                maxSpeed = currentSpeed;
+            }
+
+            // 평균 속도 계산용 샘플 저장 (이동 중일 때만)
+            if (currentSpeed > 1) {
+                speedSamples.push(currentSpeed);
+            }
+
+            // 현재 위치 저장
+            lastPosition = {
+                latitude,
+                longitude,
+                timestamp
+            };
+
+            updateDisplay();
+            saveData();
+        }
+
+        // GPS 에러 핸들러
+        function handleError(error) {
+            statusDot.classList.remove('active');
+
+            let message = '';
+            switch (error.code) {
+                case error.PERMISSION_DENIED:
+                    message = 'GPS 권한이 거부되었습니다. 설정에서 위치 권한을 허용해주세요.';
+                    break;
+                case error.POSITION_UNAVAILABLE:
+                    message = 'GPS 신호를 받을 수 없습니다. 실외에서 사용해주세요.';
+                    break;
+                case error.TIMEOUT:
+                    message = 'GPS 응답 시간 초과. 다시 시도합니다...';
+                    break;
+                default:
+                    message = 'GPS 오류가 발생했습니다.';
+            }
+
+            statusText.textContent = 'GPS 오류';
+            errorMessage.textContent = message;
+            errorMessage.classList.add('show');
+        }
+
+        // 추적 시작
+        function startTracking() {
+            if (!navigator.geolocation) {
+                errorMessage.textContent = '이 브라우저는 GPS를 지원하지 않습니다.';
+                errorMessage.classList.add('show');
+                return;
+            }
+
+            isTracking = true;
+            errorMessage.classList.remove('show');
+            btnStart.textContent = '정지';
+            btnStart.classList.remove('btn-start');
+            btnStart.classList.add('btn-stop');
+
+            // 타이머 시작
+            if (!startTime) {
+                startTime = Date.now() - (elapsedSeconds * 1000);
+            }
+
+            timerInterval = setInterval(() => {
+                elapsedSeconds = Math.floor((Date.now() - startTime) / 1000);
+                elapsedTimeEl.textContent = formatTime(elapsedSeconds);
+            }, 1000);
+
+            // GPS 추적 시작
+            watchId = navigator.geolocation.watchPosition(
+                handlePosition,
+                handleError,
+                {
+                    enableHighAccuracy: true,
+                    maximumAge: 1000,
+                    timeout: 10000
+                }
+            );
+
+            statusText.textContent = 'GPS 연결중...';
+
+            // 음성 안내 시작 (10분마다)
+            startVoiceAnnouncement();
+
+            // 자동 종료 체크 시작 (5분간 움직임 없으면 자동 종료)
+            startAutoStopCheck();
+        }
+
+        // 추적 정지
+        function stopTracking() {
+            isTracking = false;
+            btnStart.textContent = '시작';
+            btnStart.classList.remove('btn-stop');
+            btnStart.classList.add('btn-start');
+
+            // 타이머 정지
+            if (timerInterval) {
+                clearInterval(timerInterval);
+                timerInterval = null;
+            }
+
+            // GPS 추적 정지
+            if (watchId !== null) {
+                navigator.geolocation.clearWatch(watchId);
+                watchId = null;
+            }
+
+            // 음성 안내 정지
+            stopVoiceAnnouncement();
+
+            // 자동 종료 체크 정지
+            stopAutoStopCheck();
+
+            // 세션 데이터 삭제 (정상 종료)
+            clearSessionData();
+
+            // 현재 속도 0으로
+            currentSpeedEl.textContent = '0.0';
+            currentSpeedValue = 0;
+            statusDot.classList.remove('active');
+            statusText.textContent = 'GPS 대기중';
+        }
+
+        // 초기화 (주행거리는 유지)
+        function reset() {
+            if (isTracking) {
+                stopTracking();
+            }
+
+            // 주행거리는 초기화하지 않음
+            maxSpeed = 0;
+            speedSamples = [];
+            elapsedSeconds = 0;
+            startTime = null;
+            lastPosition = null;
+            sessionDistance = 0;  // 세션 거리 초기화
+            currentSpeedValue = 0;
+
+            currentSpeedEl.textContent = '0.0';
+            // totalDistance는 유지
+            sessionDistanceEl.innerHTML = '0.00<span class="session-unit">km</span>';
+            maxSpeedEl.textContent = '0.0';
+            avgSpeedEl.textContent = '0.0';
+            elapsedTimeEl.textContent = '00:00:00';
+            accuracyInfoEl.innerHTML = 'GPS 정확도: <span>--</span>m';
+
+            saveData(); // 주행거리 유지하면서 저장
+        }
+
+        // 주행거리 완전 초기화 (별도 기능)
+        function resetDistance() {
+            totalDistance = 0;
+            totalDistanceEl.textContent = '0.00';
+            saveData();
+        }
+
+        // 이벤트 리스너
+        btnStart.addEventListener('click', () => {
+            if (isTracking) {
+                stopTracking();
+            } else {
+                startTracking();
+            }
+        });
+
+        btnReset.addEventListener('click', () => {
+            if (confirm('주행 기록을 초기화하시겠습니까?\n(누적 주행거리는 유지됩니다)')) {
+                reset();
+            }
+        });
+
+        // 주행거리 카드 길게 누르기 (누적거리 초기화)
+        const distanceCard = document.getElementById('distanceCard');
+        let longPressTimer = null;
+
+        distanceCard.addEventListener('touchstart', (e) => {
+            longPressTimer = setTimeout(() => {
+                if (confirm('누적 주행거리를 초기화하시겠습니까?')) {
+                    resetDistance();
+                }
+            }, 1500); // 1.5초 길게 누르기
+        });
+
+        distanceCard.addEventListener('touchend', () => {
+            clearTimeout(longPressTimer);
+        });
+
+        distanceCard.addEventListener('touchmove', () => {
+            clearTimeout(longPressTimer);
+        });
+
+        // 화면 꺼짐 방지 (지원되는 경우)
+        async function requestWakeLock() {
+            if ('wakeLock' in navigator) {
+                try {
+                    await navigator.wakeLock.request('screen');
+                } catch (err) {
+                    console.log('Wake Lock 요청 실패:', err);
+                }
+            }
+        }
+
+        // 화면 세로 모드 고정
+        function lockPortraitOrientation() {
+            if (screen.orientation && screen.orientation.lock) {
+                screen.orientation.lock('portrait').catch(err => {
+                    console.log('화면 방향 고정 불가:', err);
+                });
+            }
+        }
+
+        // 페이지 가시성 변경 시 처리 (백그라운드 대응)
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'visible') {
+                // 포그라운드로 복귀
+                console.log('앱 포그라운드 복귀');
+
+                if (isTracking) {
+                    requestWakeLock();
+
+                    // 타이머 UI 즉시 업데이트 (백그라운드에서 타이머가 멈췄어도 정확한 시간 표시)
+                    if (startTime) {
+                        elapsedSeconds = Math.floor((Date.now() - startTime) / 1000);
+                        elapsedTimeEl.textContent = formatTime(elapsedSeconds);
+                    }
+
+                    // 타이머 인터벌이 멈췄으면 재시작
+                    if (!timerInterval) {
+                        timerInterval = setInterval(() => {
+                            elapsedSeconds = Math.floor((Date.now() - startTime) / 1000);
+                            elapsedTimeEl.textContent = formatTime(elapsedSeconds);
+                        }, 1000);
+                    }
+
+                    updateDisplay();
+                } else {
+                    // 추적 중이 아니지만 세션 데이터가 있는지 확인 (앱이 백그라운드에서 종료됐을 수 있음)
+                    const sessionData = loadSessionData();
+                    if (sessionData && sessionData.isTracking) {
+                        // 이전 세션 복원 여부 확인
+                        if (confirm('이전 주행 기록이 있습니다. 계속하시겠습니까?')) {
+                            // 세션 데이터 복원
+                            startTime = sessionData.startTime;
+                            elapsedSeconds = Math.floor((Date.now() - startTime) / 1000);
+                            sessionDistance = sessionData.sessionDistance || 0;
+                            speedSamples = sessionData.speedSamples || [];
+                            maxSpeed = sessionData.maxSpeed || 0;
+                            lastPosition = sessionData.lastPosition || null;
+
+                            // 추적 재시작
+                            startTracking();
+                        } else {
+                            clearSessionData();
+                        }
+                    }
+                }
+            } else {
+                // 백그라운드로 전환
+                console.log('앱 백그라운드 전환');
+
+                if (isTracking) {
+                    // 현재 세션 데이터 저장
+                    saveSessionData();
+                    saveData();
+                }
+            }
+        });
+
+        // 전체화면 관련
+        const fullscreenOverlay = document.getElementById('fullscreenOverlay');
+        const fullscreenBtn = document.getElementById('fullscreenBtn');
+
+        // 전체화면 전환 함수
+        function enterFullscreen() {
+            const elem = document.documentElement;
+            if (elem.requestFullscreen) {
+                elem.requestFullscreen();
+            } else if (elem.webkitRequestFullscreen) {
+                elem.webkitRequestFullscreen();
+            } else if (elem.msRequestFullscreen) {
+                elem.msRequestFullscreen();
+            }
+        }
+
+        // 전체화면 종료 함수
+        function exitFullscreen() {
+            if (document.exitFullscreen) {
+                document.exitFullscreen();
+            } else if (document.webkitExitFullscreen) {
+                document.webkitExitFullscreen();
+            } else if (document.msExitFullscreen) {
+                document.msExitFullscreen();
+            }
+        }
+
+        // 전체화면 상태 확인
+        function isFullscreen() {
+            return !!(document.fullscreenElement || document.webkitFullscreenElement || document.msFullscreenElement);
+        }
+
+        // 전체화면 토글
+        function toggleFullscreen() {
+            if (isFullscreen()) {
+                exitFullscreen();
+            } else {
+                enterFullscreen();
+            }
+        }
+
+        // 시작 오버레이 클릭 시 전체화면 + 자동 시작
+        fullscreenOverlay.addEventListener('click', () => {
+            enterFullscreen();
+            fullscreenOverlay.classList.add('hidden');
+            requestWakeLock();
+            lockPortraitOrientation();  // 화면 세로 고정
+            startTracking(); // GPS 추적 자동 시작
+        });
+
+        // 전체화면 버튼 클릭
+        fullscreenBtn.addEventListener('click', toggleFullscreen);
+
+        // 전체화면 상태 변경 감지
+        document.addEventListener('fullscreenchange', updateFullscreenButton);
+        document.addEventListener('webkitfullscreenchange', updateFullscreenButton);
+
+        function updateFullscreenButton() {
+            fullscreenBtn.textContent = isFullscreen() ? '⛶' : '⛶';
+        }
+
+        // PWA로 설치된 경우 오버레이 숨김 + 자동 시작
+        if (window.matchMedia('(display-mode: standalone)').matches ||
+            window.navigator.standalone === true) {
+            fullscreenOverlay.classList.add('hidden');
+            requestWakeLock();
+            lockPortraitOrientation();  // 화면 세로 고정
+            startTracking(); // GPS 추적 자동 시작
+        }
+
+        // 페이지 종료 전 데이터 저장
+        window.addEventListener('beforeunload', () => {
+            if (isTracking) {
+                saveSessionData();
+                saveData();
+            }
+        });
+
+        // 페이지 숨김 시 데이터 저장 (모바일에서 beforeunload가 작동하지 않을 수 있음)
+        window.addEventListener('pagehide', () => {
+            if (isTracking) {
+                saveSessionData();
+                saveData();
+            }
+        });
+
+        // 초기화
+        loadSavedData();
+
+        // 자동 저장된 세션 확인 및 요약 표시
+        showAutoSavedSummary();
+
+        // 앱 시작 시 이전 세션 확인
+        const previousSession = loadSessionData();
+        if (previousSession && previousSession.isTracking) {
+            // PWA나 전체화면 모드가 아닌 경우에만 복원 확인
+            if (!window.matchMedia('(display-mode: standalone)').matches &&
+                window.navigator.standalone !== true) {
+                setTimeout(() => {
+                    if (confirm('이전 주행 기록이 있습니다. 계속하시겠습니까?')) {
+                        startTime = previousSession.startTime;
+                        elapsedSeconds = Math.floor((Date.now() - startTime) / 1000);
+                        sessionDistance = previousSession.sessionDistance || 0;
+                        speedSamples = previousSession.speedSamples || [];
+                        maxSpeed = previousSession.maxSpeed || 0;
+                        lastPosition = previousSession.lastPosition || null;
+                        fullscreenOverlay.classList.add('hidden');
+                        startTracking();
+                    } else {
+                        clearSessionData();
+                    }
+                }, 500);
+            }
+        }
+    </script>
+</body>
+</html>
